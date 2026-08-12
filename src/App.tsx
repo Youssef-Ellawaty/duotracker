@@ -44,12 +44,14 @@ import {
   fetchPastWeeksFromSupabase,
   fetchWeekFromSupabase,
   fetchScheduleFromSupabase,
+  fetchProfileFromSupabase,
 } from './utils/supabaseClient';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabView>('MY_WEEK');
+  const [isInitialLoaded, setIsInitialLoaded] = useState(false);
 
-  // LocalStorage State
+  // Initial State
   const [userProfile, setUserProfile] = useState<UserProfile>(loadProfile);
   const [scheduleConfig, setScheduleConfig] = useState<WeekScheduleConfig>(loadScheduleConfig);
   const currentWeekInfo = calculateCurrentWeekInfo(scheduleConfig);
@@ -95,76 +97,103 @@ export default function App() {
     setIsLoginModalOpen(true);
   };
 
-  // Automatic Supabase Data Fetching & Real-time Live Polling
+  // Automatic Supabase Initial Data Fetching & Real-time Live Polling
   useEffect(() => {
+    let isMounted = true;
+
     async function loadFromSupabase() {
-      const userKey = `week_${userProfile.name.replace(/\s+/g, '_')}`;
-      const partnerKey = `week_${userProfile.partnerName.replace(/\s+/g, '_')}`;
+      try {
+        // 1. Fetch Profile from duotracker_profiles using id
+        const profileId = userProfile.id || (userProfile.name.toLowerCase().includes('youssef') ? 'user_youssef' : 'user_emy');
+        const remoteProfile = (await fetchProfileFromSupabase(profileId)) || (await fetchProfileFromSupabase(userProfile.name));
+        if (remoteProfile && isMounted) {
+          setUserProfile(remoteProfile);
+        }
 
-      const remoteSchedule = await fetchScheduleFromSupabase();
-      if (remoteSchedule) {
-        setScheduleConfig(remoteSchedule);
-        saveScheduleConfig(remoteSchedule);
-      }
+        const activeName = remoteProfile ? remoteProfile.name : userProfile.name;
+        const activePartnerName = remoteProfile ? remoteProfile.partnerName : userProfile.partnerName;
 
-      // Load user's own data
-      const remoteMy = (await fetchWeekFromSupabase(userKey)) || (await fetchWeekFromSupabase('my_week'));
-      if (remoteMy && !remoteMy.weekTitle.includes('3')) {
-        setMyWeeklyData(remoteMy);
-        saveMyWeek(remoteMy, userProfile.name);
-      }
+        // 2. Fetch Schedule Config from duotracker_weeks
+        const remoteSchedule = await fetchScheduleFromSupabase();
+        if (remoteSchedule && isMounted) {
+          setScheduleConfig(remoteSchedule);
+          saveScheduleConfig(remoteSchedule);
+        }
 
-      // Load partner's data
-      const remotePartner = (await fetchWeekFromSupabase(partnerKey)) || (await fetchWeekFromSupabase('partner_week'));
-      if (remotePartner && !remotePartner.weekTitle.includes('3')) {
-        setPartnerWeeklyData(remotePartner);
-        savePartnerWeek(remotePartner, userProfile.partnerName);
-      }
+        // 3. Fetch User's Weekly Goal from duotracker_weeks using id
+        const userKey = `week_${activeName.replace(/\s+/g, '_')}`;
+        const remoteMy = (await fetchWeekFromSupabase(userKey)) || (await fetchWeekFromSupabase('my_week'));
+        if (remoteMy && isMounted) {
+          setMyWeeklyData(remoteMy);
+          saveMyWeek(remoteMy, activeName);
+        }
 
-      const remotePast = await fetchPastWeeksFromSupabase();
-      if (remotePast) {
-        const cleanPast = remotePast.filter(
-          (rec) =>
-            !rec.weekId.startsWith('week-archive-') &&
-            rec.winnerName !== 'أحمد محمود' &&
-            rec.winnerName !== 'عمر خالد'
-        );
-        setPastWeeks(cleanPast);
-        savePastWeeks(cleanPast);
+        // 4. Fetch Partner's Weekly Goal from duotracker_weeks using id
+        const partnerKey = `week_${activePartnerName.replace(/\s+/g, '_')}`;
+        const remotePartner = (await fetchWeekFromSupabase(partnerKey)) || (await fetchWeekFromSupabase('partner_week'));
+        if (remotePartner && isMounted) {
+          setPartnerWeeklyData(remotePartner);
+          savePartnerWeek(remotePartner, activePartnerName);
+        }
+
+        // 5. Fetch Past Weeks History from duotracker_history using id = 'past_weeks_global'
+        const remotePast = await fetchPastWeeksFromSupabase();
+        if (remotePast && isMounted) {
+          const cleanPast = remotePast.filter(
+            (rec) =>
+              !rec.weekId.startsWith('week-archive-') &&
+              rec.winnerName !== 'أحمد محمود' &&
+              rec.winnerName !== 'عمر خالد'
+          );
+          setPastWeeks(cleanPast);
+          savePastWeeks(cleanPast);
+        }
+      } catch (err) {
+        console.warn('Startup fetch from Supabase exception:', err);
+      } finally {
+        if (isMounted) {
+          setIsInitialLoaded(true);
+        }
       }
     }
 
     loadFromSupabase();
 
-    // Auto-polling interval every 6 seconds to pull live updates from partner seamlessly
+    // Auto-polling interval every 6 seconds to pull live updates from partner from duotracker_weeks
     const interval = setInterval(async () => {
       const partnerKey = `week_${userProfile.partnerName.replace(/\s+/g, '_')}`;
       const remotePartner = (await fetchWeekFromSupabase(partnerKey)) || (await fetchWeekFromSupabase('partner_week'));
-      if (remotePartner) {
+      if (remotePartner && isMounted) {
         setPartnerWeeklyData(remotePartner);
-        savePartnerWeek(remotePartner, userProfile.partnerName);
       }
     }, 6000);
 
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [userProfile.name, userProfile.partnerName]);
 
-  // Sync track changes
+  // Save changes directly to Supabase tables ONLY after initial load completes to avoid overwriting remote data
   useEffect(() => {
+    if (!isInitialLoaded) return;
     saveProfile(userProfile);
-  }, [userProfile]);
+  }, [userProfile, isInitialLoaded]);
 
   useEffect(() => {
+    if (!isInitialLoaded) return;
     saveMyWeek(myWeeklyData, userProfile.name);
-  }, [myWeeklyData, userProfile.name]);
+  }, [myWeeklyData, userProfile.name, isInitialLoaded]);
 
   useEffect(() => {
+    if (!isInitialLoaded) return;
     savePartnerWeek(partnerWeeklyData, userProfile.partnerName);
-  }, [partnerWeeklyData, userProfile.partnerName]);
+  }, [partnerWeeklyData, userProfile.partnerName, isInitialLoaded]);
 
   useEffect(() => {
+    if (!isInitialLoaded) return;
     savePastWeeks(pastWeeks);
-  }, [pastWeeks]);
+  }, [pastWeeks, isInitialLoaded]);
 
   // Latest archived week for Champion Banner
   const latestWeek = pastWeeks.length > 0 ? pastWeeks[0] : null;

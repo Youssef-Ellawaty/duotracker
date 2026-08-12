@@ -192,8 +192,9 @@ export async function syncProfileToSupabase(profile: UserProfile): Promise<void>
   if (!client) return;
 
   try {
+    const profileId = profile.id || `profile_${profile.name.replace(/\s+/g, '_')}`;
     const { error } = await client.from('duotracker_profiles').upsert({
-      id: profile.id || `profile_${profile.name.replace(/\s+/g, '_')}`,
+      id: profileId,
       name: profile.name,
       pin: profile.pin,
       track: profile.track, // 'SCI_MATH' (علمي رياضة) or 'SCI_BIO' (علمي علوم)
@@ -215,16 +216,25 @@ export async function syncProfileToSupabase(profile: UserProfile): Promise<void>
   }
 }
 
-export async function fetchProfileFromSupabase(profileId: string): Promise<UserProfile | null> {
+export async function fetchProfileFromSupabase(profileIdOrName: string): Promise<UserProfile | null> {
   const client = getSupabaseClient();
   if (!client) return null;
 
   try {
-    const { data, error } = await client
+    let { data, error } = await client
       .from('duotracker_profiles')
       .select('*')
-      .eq('id', profileId)
+      .eq('id', profileIdOrName)
       .maybeSingle();
+
+    if (!data) {
+      const byName = await client
+        .from('duotracker_profiles')
+        .select('*')
+        .eq('name', profileIdOrName)
+        .maybeSingle();
+      data = byName.data;
+    }
 
     if (error || !data) return null;
 
