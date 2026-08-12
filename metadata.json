@@ -1,0 +1,6 @@
+{
+  "name": "DuoTracker",
+  "description": "Professional Study Goal Tracker & Head-to-Head Comparison for Partners",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

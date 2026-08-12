@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ar" dir="rtl" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>DuoTracker | متابع أهداف المذاكرة الأسبوعية</title>
+    <meta name="description" content="DuoTracker - تطبيق متابعة وتحدي أهداف المذاكرة الأسبوعية لشريكين." />
+    
+    <!-- PWA Primary Meta Tags -->
+    <meta name="theme-color" content="#0b0f19" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="DuoTracker" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/src/assets/images/duotracker_pwa_icon_1786572325599.jpg" />
+    <link rel="icon" type="image/jpeg" href="/src/assets/images/duotracker_pwa_icon_1786572325599.jpg" />
+
+    <!-- Web Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Outfit:wght@400;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  </head>
+  <body class="bg-[#0b0f19] text-slate-100 antialiased font-['Cairo',sans-serif] selection:bg-emerald-500/30 selection:text-emerald-300 min-h-screen overscroll-none">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(err => {
+            console.log('SW registration failed:', err);
+          });
+        });
+      }
+    </script>
+  </body>
+</html>
+
