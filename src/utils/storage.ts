@@ -1,7 +1,7 @@
 import { PastWeekRecord, UserProfile, WeeklyData } from '../types';
 import { getSubjectsForTrack } from '../data/tracks';
 import { calculateWeeklyScore } from './scoreCalculator';
-import { syncPastWeeksToSupabase, syncWeekToSupabase } from './supabaseClient';
+import { syncPastWeeksToSupabase, syncProfileToSupabase, syncWeekToSupabase } from './supabaseClient';
 
 const PROFILE_KEY = 'duotracker_profile_v3';
 const MY_WEEK_KEY = 'duotracker_my_week_v3';
@@ -92,6 +92,8 @@ export function loadProfile(): UserProfile {
 export function saveProfile(profile: UserProfile): void {
   try {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+    // Trigger automatic background sync with Supabase
+    syncProfileToSupabase(profile);
   } catch (e) {
     console.error('Failed to save profile', e);
   }
