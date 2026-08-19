@@ -52,7 +52,7 @@ export const WeekScheduleBanner: React.FC<WeekScheduleBannerProps> = ({
     setEditingId(null);
   };
 
-  const sortedPeriods = [...(scheduleConfig.periods || [])].sort((a, b) => b.startDate.localeCompare(a.startDate));
+const sortedPeriods = [...(scheduleConfig.periods || [])].sort((a, b) => b.startDate.localeCompare(a.startDate));
 
   return (
     <div className="space-y-4 my-4">
