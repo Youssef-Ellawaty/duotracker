@@ -101,23 +101,27 @@ export default function App() {
   }
 
   // تسجيل الدخول: يجلب أحدث نسخة من البروفايل من السيرفر (لا تسجيل دخول تلقائي محفوظ محلياً)
-  const handleLoginProfile = async (updated: UserProfile) => {
-    if (!supabaseReady) {
-      setIsSupabaseModalOpen(true);
-      return;
-    }
-    setIsLoadingData(true);
-    try {
-      const remote = (await fetchRemoteProfile(updated.id)) || updated;
-      const finalProfile: UserProfile = { ...remote, isLoggedIn: true };
-      setUserProfile(finalProfile);
-      await persistProfile(finalProfile);
-      await loadAllRemoteData(finalProfile);
-      setIsLoginModalOpen(false);
-    } finally {
-      setIsLoadingData(false);
-    }
-  };
+const handleLoginProfile = async (updated: UserProfile) => {
+  if (!supabaseReady) {
+    setIsSupabaseModalOpen(true);
+    return;
+  }
+  setIsLoadingData(true);
+  try {
+    const remote = (await fetchRemoteProfile(updated.id)) || updated;
+    const finalProfile: UserProfile = { ...remote, isLoggedIn: true };
+    setUserProfile(finalProfile);
+    await persistProfile(finalProfile);
+    await loadAllRemoteData(finalProfile);
+  } catch (err) {
+    console.error('فشل تحميل بيانات تسجيل الدخول:', err);
+    alert('حدث خطأ أثناء تحميل بياناتك من Supabase. تحقق من الاتصال أو من إعدادات الجداول.');
+  } finally {
+    // هذا السطر لازم يشتغل دايماً، بغض النظر عن نجاح أو فشل التحميل
+    setIsLoginModalOpen(false);
+    setIsLoadingData(false);
+  }
+};
 
   const handleLogout = () => {
     setUserProfile(null);
