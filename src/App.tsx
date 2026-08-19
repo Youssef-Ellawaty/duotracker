@@ -1,9 +1,8 @@
 /**
- * DuoTracker - High-end Responsive Study Goal Tracker for Partners
- * Built with React 19, Tailwind CSS v4, Lucide Icons, and Framer Motion.
+ * DuoTracker - شخصان فقط، مزامنة لحظية عبر Supabase، بدون أي تخزين محلي للبيانات.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Navbar } from './components/Navbar';
 import { ChampionBanner } from './components/ChampionBanner';
 import { MyWeekView } from './components/Views/MyWeekView';
@@ -13,22 +12,17 @@ import { HallOfFameView } from './components/Views/HallOfFameView';
 import { LoginModal } from './components/LoginModal';
 import { WeeklyGoalSetupModal } from './components/WeeklyGoalSetupModal';
 import { SupabaseConfigModal } from './components/SupabaseConfigModal';
+import { PastWeekRecord, TabView, UserProfile, WeeklyData } from './types';
 import {
-  PastWeekRecord,
-  TabView,
-  UserProfile,
-  WeeklyData,
-} from './types';
-import {
+  PRESET_USERS,
   createInitialWeeklyData,
-  loadMyWeek,
-  loadPartnerWeek,
-  loadPastWeeks,
-  loadProfile,
-  saveMyWeek,
-  savePartnerWeek,
-  savePastWeeks,
-  saveProfile,
+  weekKeyFor,
+  fetchRemoteProfile,
+  persistProfile,
+  fetchRemoteWeek,
+  persistWeek,
+  fetchRemotePastWeeks,
+  persistPastWeeks,
 } from './utils/storage';
 import { calculateWeeklyScore } from './utils/scoreCalculator';
 import confetti from 'canvas-confetti';
@@ -36,190 +30,165 @@ import confetti from 'canvas-confetti';
 import { WeekScheduleBanner } from './components/WeekScheduleBanner';
 import {
   WeekScheduleConfig,
-  loadScheduleConfig,
-  saveScheduleConfig,
+  EMPTY_SCHEDULE_CONFIG,
   calculateCurrentWeekInfo,
+  addPeriod,
+  updatePeriod,
+  removePeriod,
+  createPeriod,
+  saveScheduleConfig,
 } from './utils/schedule';
 import {
-  fetchPastWeeksFromSupabase,
-  fetchWeekFromSupabase,
+  getSupabaseConfig,
   fetchScheduleFromSupabase,
-  fetchProfileFromSupabase,
+  subscribeToTable,
 } from './utils/supabaseClient';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabView>('MY_WEEK');
-  const [isInitialLoaded, setIsInitialLoaded] = useState(false);
 
-  // Initial State
-  const [userProfile, setUserProfile] = useState<UserProfile>(loadProfile);
-  const [scheduleConfig, setScheduleConfig] = useState<WeekScheduleConfig>(loadScheduleConfig);
-  const currentWeekInfo = calculateCurrentWeekInfo(scheduleConfig);
+  const [supabaseReady, setSupabaseReady] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isLoadingData, setIsLoadingData] = useState(false);
 
-  const [myWeeklyData, setMyWeeklyData] = useState<WeeklyData>(() => {
-    const loaded = loadMyWeek(userProfile.track);
-    if (currentWeekInfo.isStarted && currentWeekInfo.weekNumber > 0) {
-      return {
-        ...loaded,
-        weekNumber: currentWeekInfo.weekNumber,
-        weekTitle: currentWeekInfo.weekTitle,
-      };
-    }
-    return loaded;
-  });
+  const [scheduleConfig, setScheduleConfig] = useState<WeekScheduleConfig>(EMPTY_SCHEDULE_CONFIG);
+  const [myWeeklyData, setMyWeeklyData] = useState<WeeklyData | null>(null);
+  const [partnerWeeklyData, setPartnerWeeklyData] = useState<WeeklyData | null>(null);
+  const [pastWeeks, setPastWeeks] = useState<PastWeekRecord[]>([]);
 
-  const [partnerWeeklyData, setPartnerWeeklyData] = useState<WeeklyData>(() => {
-    const loaded = loadPartnerWeek(userProfile.partnerTrack);
-    if (currentWeekInfo.isStarted && currentWeekInfo.weekNumber > 0) {
-      return {
-        ...loaded,
-        weekNumber: currentWeekInfo.weekNumber,
-        weekTitle: currentWeekInfo.weekTitle,
-      };
-    }
-    return loaded;
-  });
-  const [pastWeeks, setPastWeeks] = useState<PastWeekRecord[]>(loadPastWeeks);
-
-  // Modals
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(() => !userProfile.isLoggedIn);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(true);
   const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
 
-  // Handle Logout
+  const currentWeekInfo = calculateCurrentWeekInfo(scheduleConfig);
+
+  // التحقق من إعداد Supabase عند فتح التطبيق (لا وجود لأي بيانات بدون سيرفر)
+  useEffect(() => {
+    const cfg = getSupabaseConfig();
+    setSupabaseReady(cfg.isConnected);
+    if (!cfg.isConnected) setIsSupabaseModalOpen(true);
+  }, []);
+
+  async function loadAllRemoteData(profile: UserProfile) {
+    const [schedule, myWeek, partnerWeek, past] = await Promise.all([
+      fetchScheduleFromSupabase(),
+      fetchRemoteWeek(weekKeyFor(profile.name)),
+      fetchRemoteWeek(weekKeyFor(profile.partnerName)),
+      fetchRemotePastWeeks(),
+    ]);
+
+    setScheduleConfig(schedule || EMPTY_SCHEDULE_CONFIG);
+
+    if (myWeek) {
+      setMyWeeklyData(myWeek);
+    } else {
+      const initial = createInitialWeeklyData('Current Week (1)', 1, profile.track, 0);
+      setMyWeeklyData(initial);
+      await persistWeek(weekKeyFor(profile.name), initial);
+    }
+
+    if (partnerWeek) {
+      setPartnerWeeklyData(partnerWeek);
+    } else {
+      const initial = createInitialWeeklyData('Current Week (1)', 1, profile.partnerTrack, 0);
+      setPartnerWeeklyData(initial);
+    }
+
+    const cleanPast = (past || []).filter(
+      (rec) => rec.winnerName !== 'أحمد محمود' && rec.winnerName !== 'عمر خالد'
+    );
+    setPastWeeks(cleanPast);
+  }
+
+  // تسجيل الدخول: يجلب أحدث نسخة من البروفايل من السيرفر (لا تسجيل دخول تلقائي محفوظ محلياً)
+  const handleLoginProfile = async (updated: UserProfile) => {
+    if (!supabaseReady) {
+      setIsSupabaseModalOpen(true);
+      return;
+    }
+    setIsLoadingData(true);
+    try {
+      const remote = (await fetchRemoteProfile(updated.id)) || updated;
+      const finalProfile: UserProfile = { ...remote, isLoggedIn: true };
+      setUserProfile(finalProfile);
+      await persistProfile(finalProfile);
+      await loadAllRemoteData(finalProfile);
+      setIsLoginModalOpen(false);
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
   const handleLogout = () => {
-    const loggedOutProfile: UserProfile = {
-      ...userProfile,
-      isLoggedIn: false,
-    };
-    setUserProfile(loggedOutProfile);
-    saveProfile(loggedOutProfile);
+    setUserProfile(null);
+    setMyWeeklyData(null);
+    setPartnerWeeklyData(null);
+    setPastWeeks([]);
+    setScheduleConfig(EMPTY_SCHEDULE_CONFIG);
     setIsLoginModalOpen(true);
   };
 
-  // Automatic Supabase Initial Data Fetching & Real-time Live Polling
+  // اشتراك المزامنة اللحظية: أي تعديل من أي جهاز (الشريك أو نفس الشخص من جهاز آخر) ينعكس فوراً
   useEffect(() => {
-    let isMounted = true;
+    if (!userProfile || !supabaseReady) return;
 
-    async function loadFromSupabase() {
-      try {
-        // 1. Fetch Profile from duotracker_profiles using id
-        const profileId = userProfile.id || (userProfile.name.toLowerCase().includes('youssef') ? 'user_youssef' : 'user_emy');
-        const remoteProfile = (await fetchProfileFromSupabase(profileId)) || (await fetchProfileFromSupabase(userProfile.name));
-        if (remoteProfile && isMounted) {
-          setUserProfile(remoteProfile);
-        }
+    const refreshWeeksAndSchedule = async () => {
+      const [myWeek, partnerWeek, schedule] = await Promise.all([
+        fetchRemoteWeek(weekKeyFor(userProfile.name)),
+        fetchRemoteWeek(weekKeyFor(userProfile.partnerName)),
+        fetchScheduleFromSupabase(),
+      ]);
+      if (myWeek) setMyWeeklyData(myWeek);
+      if (partnerWeek) setPartnerWeeklyData(partnerWeek);
+      if (schedule) setScheduleConfig(schedule);
+    };
 
-        const activeName = remoteProfile ? remoteProfile.name : userProfile.name;
-        const activePartnerName = remoteProfile ? remoteProfile.partnerName : userProfile.partnerName;
+    const refreshHistory = async () => {
+      const past = await fetchRemotePastWeeks();
+      if (past) setPastWeeks(past);
+    };
 
-        // 2. Fetch Schedule Config from duotracker_weeks
-        const remoteSchedule = await fetchScheduleFromSupabase();
-        if (remoteSchedule && isMounted) {
-          setScheduleConfig(remoteSchedule);
-          saveScheduleConfig(remoteSchedule);
-        }
+    const unsubWeeks = subscribeToTable('duotracker_weeks', refreshWeeksAndSchedule);
+    const unsubHistory = subscribeToTable('duotracker_history', refreshHistory);
 
-        // 3. Fetch User's Weekly Goal from duotracker_weeks using id
-        const userKey = `week_${activeName.replace(/\s+/g, '_')}`;
-        const remoteMy = (await fetchWeekFromSupabase(userKey)) || (await fetchWeekFromSupabase('my_week'));
-        if (remoteMy && isMounted) {
-          setMyWeeklyData(remoteMy);
-          saveMyWeek(remoteMy, activeName);
-        }
-
-        // 4. Fetch Partner's Weekly Goal from duotracker_weeks using id
-        const partnerKey = `week_${activePartnerName.replace(/\s+/g, '_')}`;
-        const remotePartner = (await fetchWeekFromSupabase(partnerKey)) || (await fetchWeekFromSupabase('partner_week'));
-        if (remotePartner && isMounted) {
-          setPartnerWeeklyData(remotePartner);
-          savePartnerWeek(remotePartner, activePartnerName);
-        }
-
-        // 5. Fetch Past Weeks History from duotracker_history using id = 'past_weeks_global'
-        const remotePast = await fetchPastWeeksFromSupabase();
-        if (remotePast && isMounted) {
-          const cleanPast = remotePast.filter(
-            (rec) =>
-              !rec.weekId.startsWith('week-archive-') &&
-              rec.winnerName !== 'أحمد محمود' &&
-              rec.winnerName !== 'عمر خالد'
-          );
-          setPastWeeks(cleanPast);
-          savePastWeeks(cleanPast);
-        }
-      } catch (err) {
-        console.warn('Startup fetch from Supabase exception:', err);
-      } finally {
-        if (isMounted) {
-          setIsInitialLoaded(true);
-        }
-      }
-    }
-
-    loadFromSupabase();
-
-    // Auto-polling interval every 6 seconds to pull live updates from partner from duotracker_weeks
-    const interval = setInterval(async () => {
-      const partnerKey = `week_${userProfile.partnerName.replace(/\s+/g, '_')}`;
-      const remotePartner = (await fetchWeekFromSupabase(partnerKey)) || (await fetchWeekFromSupabase('partner_week'));
-      if (remotePartner && isMounted) {
-        setPartnerWeeklyData(remotePartner);
-      }
-    }, 6000);
+    // شبكة أمان: إعادة جلب دورية خفيفة من السيرفر فقط (وليست تخزيناً محلياً) في حال انقطاع القناة اللحظية
+    const interval = setInterval(() => {
+      refreshWeeksAndSchedule();
+      refreshHistory();
+    }, 15000);
 
     return () => {
-      isMounted = false;
+      unsubWeeks();
+      unsubHistory();
       clearInterval(interval);
     };
-  }, [userProfile.name, userProfile.partnerName]);
+  }, [userProfile, supabaseReady]);
 
-  // Save changes directly to Supabase tables ONLY after initial load completes to avoid overwriting remote data
-  useEffect(() => {
-    if (!isInitialLoaded) return;
-    saveProfile(userProfile);
-  }, [userProfile, isInitialLoaded]);
-
-  useEffect(() => {
-    if (!isInitialLoaded) return;
-    saveMyWeek(myWeeklyData, userProfile.name);
-  }, [myWeeklyData, userProfile.name, isInitialLoaded]);
-
-  useEffect(() => {
-    if (!isInitialLoaded) return;
-    savePartnerWeek(partnerWeeklyData, userProfile.partnerName);
-  }, [partnerWeeklyData, userProfile.partnerName, isInitialLoaded]);
-
-  useEffect(() => {
-    if (!isInitialLoaded) return;
-    savePastWeeks(pastWeeks);
-  }, [pastWeeks, isInitialLoaded]);
-
-  // Latest archived week for Champion Banner
   const latestWeek = pastWeeks.length > 0 ? pastWeeks[0] : null;
 
-  // Handle Profile Update
-  const handleSaveProfile = (updated: UserProfile) => {
-    setUserProfile(updated);
-    saveProfile(updated);
+  const handleUpdateMyWeek = async (data: WeeklyData) => {
+    if (!userProfile) return;
+    setMyWeeklyData(data);
+    const saved = await persistWeek(weekKeyFor(userProfile.name), data);
+    setMyWeeklyData(saved);
+  };
 
-    // Refresh subject lists if track changed
-    if (updated.track !== userProfile.track) {
+  const handleSaveProfile = async (updated: UserProfile) => {
+    setUserProfile(updated);
+    await persistProfile(updated);
+
+    if (myWeeklyData && updated.track !== userProfile?.track) {
       const refreshedMy = createInitialWeeklyData(myWeeklyData.weekTitle, myWeeklyData.weekNumber, updated.track);
-      setMyWeeklyData(refreshedMy);
-      saveMyWeek(refreshedMy);
-    }
-    if (updated.partnerTrack !== userProfile.partnerTrack) {
-      const refreshedPartner = createInitialWeeklyData(partnerWeeklyData.weekTitle, partnerWeeklyData.weekNumber, updated.partnerTrack);
-      setPartnerWeeklyData(refreshedPartner);
-      savePartnerWeek(refreshedPartner);
+      const saved = await persistWeek(weekKeyFor(updated.name), refreshedMy);
+      setMyWeeklyData(saved);
     }
   };
 
-  // Switch Profile / Perspective between User and Partner for testing and multi-partner session
-  const handleSwitchProfile = () => {
-    const updated: UserProfile = {
+  const handleSwitchProfile = async () => {
+    if (!userProfile) return;
+    const swapped: UserProfile = {
       ...userProfile,
+      id: userProfile.id === 'user_emy' ? 'user_youssef' : 'user_emy',
       name: userProfile.partnerName,
       partnerName: userProfile.name,
       track: userProfile.partnerTrack,
@@ -228,31 +197,30 @@ export default function App() {
       partnerPin: userProfile.pin,
     };
 
-    // Swap active week data
-    const tempMy = { ...myWeeklyData };
-    const tempPartner = { ...partnerWeeklyData };
+    setIsLoadingData(true);
+    try {
+      const remote = (await fetchRemoteProfile(swapped.id)) || swapped;
+      const finalProfile: UserProfile = { ...remote, isLoggedIn: true };
+      setUserProfile(finalProfile);
+      await loadAllRemoteData(finalProfile);
 
-    setUserProfile(updated);
-    setMyWeeklyData(tempPartner);
-    setPartnerWeeklyData(tempMy);
-
-    saveProfile(updated);
-    saveMyWeek(tempPartner);
-    savePartnerWeek(tempMy);
-
-    confetti({
-      particleCount: 40,
-      spread: 50,
-      origin: { y: 0.1 },
-      colors: ['#8b5cf6', '#10b981', '#3b82f6'],
-    });
+      confetti({
+        particleCount: 40,
+        spread: 50,
+        origin: { y: 0.1 },
+        colors: ['#8b5cf6', '#10b981', '#3b82f6'],
+      });
+    } finally {
+      setIsLoadingData(false);
+    }
   };
 
-  // Reset / Finish Week and Archive to Hall of Fame
-  const handleResetNewWeek = () => {
+  const handleResetNewWeek = async () => {
+    if (!userProfile || !myWeeklyData || !partnerWeeklyData) return;
+
     if (
       !window.confirm(
-        'Are you sure you want to finish the current week, archive performance records to the Hall of Fame, and start a new week?'
+        'Are you sure you want to finish the current period, archive performance records to the Hall of Fame, and reset weekly goals?'
       )
     ) {
       return;
@@ -272,13 +240,14 @@ export default function App() {
       isTie = true;
     }
 
+    const activePeriodName = currentWeekInfo.activePeriod?.name || myWeeklyData.weekTitle;
     const nextWeekNumber = myWeeklyData.weekNumber + 1;
 
     const newRecord: PastWeekRecord = {
       weekId: `week-archive-${Date.now()}`,
-      weekTitle: `Week ${myWeeklyData.weekNumber} - Final Result`,
-      startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      endDate: new Date().toISOString().split('T')[0],
+      weekTitle: `${activePeriodName} - Final Result`,
+      startDate: currentWeekInfo.activePeriod?.startDate || new Date().toISOString().split('T')[0],
+      endDate: currentWeekInfo.activePeriod?.endDate || new Date().toISOString().split('T')[0],
       userMetrics: {
         userName: userProfile.name,
         totalTarget: myMetrics.totalTarget,
@@ -305,32 +274,23 @@ export default function App() {
       completedAt: new Date().toISOString().split('T')[0],
     };
 
-    // Update Past Weeks
     const updatedPast = [newRecord, ...pastWeeks];
     setPastWeeks(updatedPast);
-    savePastWeeks(updatedPast);
+    await persistPastWeeks(updatedPast);
 
-    // Reset current active week data
-    const newMyWeek = createInitialWeeklyData(
-      `Current Week (${nextWeekNumber})`,
-      nextWeekNumber,
-      userProfile.track,
-      3
-    );
+    const newMyWeek = createInitialWeeklyData(`Current Week (${nextWeekNumber})`, nextWeekNumber, userProfile.track, 0);
     const newPartnerWeek = createInitialWeeklyData(
       `Current Week (${nextWeekNumber})`,
       nextWeekNumber,
       userProfile.partnerTrack,
-      3
+      0
     );
 
-    setMyWeeklyData(newMyWeek);
+    const savedMy = await persistWeek(weekKeyFor(userProfile.name), newMyWeek);
+    setMyWeeklyData(savedMy);
     setPartnerWeeklyData(newPartnerWeek);
+    await persistWeek(weekKeyFor(userProfile.partnerName), newPartnerWeek);
 
-    saveMyWeek(newMyWeek);
-    savePartnerWeek(newPartnerWeek);
-
-    // Confetti celebration for the crowned winner
     confetti({
       particleCount: 120,
       spread: 90,
@@ -341,9 +301,83 @@ export default function App() {
     setActiveTab('HALL_OF_FAME');
   };
 
+  // ----- إدارة فترات الأسبوع (يوسف فقط) -----
+  const handleAddPeriod = async (name: string, startDate: string, endDate: string) => {
+    if (!userProfile) return;
+    const period = createPeriod(name, startDate, endDate, userProfile.name);
+    const newConfig = addPeriod(scheduleConfig, period);
+    setScheduleConfig(newConfig);
+    await saveScheduleConfig(newConfig);
+  };
+
+  const handleUpdatePeriod = async (periodId: string, updates: { name?: string; startDate?: string; endDate?: string }) => {
+    const newConfig = updatePeriod(scheduleConfig, periodId, updates);
+    setScheduleConfig(newConfig);
+    await saveScheduleConfig(newConfig);
+  };
+
+  const handleDeletePeriod = async (periodId: string) => {
+    const newConfig = removePeriod(scheduleConfig, periodId);
+    setScheduleConfig(newConfig);
+    await saveScheduleConfig(newConfig);
+  };
+
+  // ----- شاشات الحالة -----
+  if (!supabaseReady) {
+    return (
+      <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col items-center justify-center gap-4 p-6 text-center">
+        <h1 className="text-xl font-black text-white">التطبيق يحتاج اتصال Supabase ليعمل</h1>
+        <p className="text-sm text-slate-400 max-w-md">
+          حتى تتم مزامنة البيانات لحظياً بين جهازي إيمي ويوسف بدون أي حفظ محلي، يجب ربط قاعدة بيانات Supabase أولاً.
+          يُفضّل ضبط <code>VITE_SUPABASE_URL</code> و<code>VITE_SUPABASE_ANON_KEY</code> كمتغيرات بيئة على Vercel.
+        </p>
+        <button
+          onClick={() => setIsSupabaseModalOpen(true)}
+          className="px-5 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-bold text-sm"
+        >
+          فتح إعدادات الربط
+        </button>
+        <SupabaseConfigModal
+          isOpen={isSupabaseModalOpen}
+          onClose={() => {
+            setIsSupabaseModalOpen(false);
+            const cfg = getSupabaseConfig();
+            setSupabaseReady(cfg.isConnected);
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (!userProfile || isLoadingData) {
+    return (
+      <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col items-center justify-center gap-4">
+        {isLoadingData && <p className="text-sm text-slate-400">جاري تحميل بياناتك من السيرفر...</p>}
+        <LoginModal
+          isOpen={isLoginModalOpen}
+          onClose={() => setIsLoginModalOpen(false)}
+          userProfile={
+            userProfile || {
+              ...PRESET_USERS.EMY,
+              isLoggedIn: false,
+            }
+          }
+          onSaveProfile={handleLoginProfile}
+        />
+      </div>
+    );
+  }
+
+  if (!myWeeklyData || !partnerWeeklyData) {
+    return (
+      <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex items-center justify-center">
+        <p className="text-sm text-slate-400">جاري تحميل بيانات الأسبوع...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col font-['Cairo',sans-serif] pb-2 sm:pb-4">
-      {/* Sticky Top Navbar */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -355,19 +389,18 @@ export default function App() {
         onLogout={handleLogout}
       />
 
-      {/* Main App Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-4 sm:pb-6">
-        {/* Master Week Launch & Schedule Control Banner - MY_WEEK & PARTNER_WEEK ONLY */}
         {(activeTab === 'MY_WEEK' || activeTab === 'PARTNER_WEEK') && (
           <>
             <WeekScheduleBanner
               userProfile={userProfile}
               scheduleConfig={scheduleConfig}
               currentWeekInfo={currentWeekInfo}
-              onUpdateSchedule={(newConfig) => setScheduleConfig(newConfig)}
+              onAddPeriod={handleAddPeriod}
+              onUpdatePeriod={handleUpdatePeriod}
+              onDeletePeriod={handleDeletePeriod}
             />
 
-            {/* Top Champion Winner Banner */}
             <ChampionBanner
               latestWeek={latestWeek}
               onOpenHallOfFame={() => setActiveTab('HALL_OF_FAME')}
@@ -375,15 +408,11 @@ export default function App() {
           </>
         )}
 
-        {/* Dynamic Tab Views */}
         {activeTab === 'MY_WEEK' && (
           <MyWeekView
             weeklyData={myWeeklyData}
-            isBeforeStart={!scheduleConfig.isStarted || currentWeekInfo.isBeforeStart}
-            onUpdateWeeklyData={(data) => {
-              setMyWeeklyData(data);
-              saveMyWeek(data, userProfile.name);
-            }}
+            isBeforeStart={!currentWeekInfo.hasActivePeriod}
+            onUpdateWeeklyData={handleUpdateMyWeek}
             onOpenSetupModal={() => setIsSetupModalOpen(true)}
           />
         )}
@@ -396,16 +425,10 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'HISTORY' && (
-          <HistoryView pastWeeks={pastWeeks} userProfile={userProfile} />
-        )}
-
-        {activeTab === 'HALL_OF_FAME' && (
-          <HallOfFameView pastWeeks={pastWeeks} userProfile={userProfile} />
-        )}
+        {activeTab === 'HISTORY' && <HistoryView pastWeeks={pastWeeks} userProfile={userProfile} />}
+        {activeTab === 'HALL_OF_FAME' && <HallOfFameView pastWeeks={pastWeeks} userProfile={userProfile} />}
       </main>
 
-      {/* Footer */}
       <footer
         className="mt-auto border-t border-slate-800/80 text-center text-xs text-slate-500 flex items-center justify-center mx-auto"
         style={{ width: '366.6px', height: '160px', paddingTop: '0px', paddingBottom: '50px' }}
@@ -425,28 +448,14 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Modals */}
-      <LoginModal
-        isOpen={isLoginModalOpen}
-        onClose={() => setIsLoginModalOpen(false)}
-        userProfile={userProfile}
-        onSaveProfile={handleSaveProfile}
-      />
-
       <WeeklyGoalSetupModal
         isOpen={isSetupModalOpen}
         onClose={() => setIsSetupModalOpen(false)}
         weeklyData={myWeeklyData}
-        onSaveWeeklyGoals={(data) => {
-          setMyWeeklyData(data);
-          saveMyWeek(data);
-        }}
+        onSaveWeeklyGoals={handleUpdateMyWeek}
       />
 
-      <SupabaseConfigModal
-        isOpen={isSupabaseModalOpen}
-        onClose={() => setIsSupabaseModalOpen(false)}
-      />
+      <SupabaseConfigModal isOpen={isSupabaseModalOpen} onClose={() => setIsSupabaseModalOpen(false)} />
     </div>
   );
 }
