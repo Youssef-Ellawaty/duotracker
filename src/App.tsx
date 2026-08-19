@@ -44,6 +44,9 @@ import {
   subscribeToTable,
 } from './utils/supabaseClient';
 
+const safeSchedule = (s: any): WeekScheduleConfig =>
+  s && Array.isArray(s.periods) ? s : EMPTY_SCHEDULE_CONFIG;
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabView>('MY_WEEK');
 
@@ -69,36 +72,36 @@ export default function App() {
     if (!cfg.isConnected) setIsSupabaseModalOpen(true);
   }, []);
 
-  async function loadAllRemoteData(profile: UserProfile) {
-    const [schedule, myWeek, partnerWeek, past] = await Promise.all([
-      fetchScheduleFromSupabase(),
-      fetchRemoteWeek(weekKeyFor(profile.name)),
-      fetchRemoteWeek(weekKeyFor(profile.partnerName)),
-      fetchRemotePastWeeks(),
-    ]);
+async function loadAllRemoteData(profile: UserProfile) {
+  const [schedule, myWeek, partnerWeek, past] = await Promise.all([
+    fetchScheduleFromSupabase(),
+    fetchRemoteWeek(weekKeyFor(profile.name)),
+    fetchRemoteWeek(weekKeyFor(profile.partnerName)),
+    fetchRemotePastWeeks(),
+  ]);
 
-    setScheduleConfig(schedule || EMPTY_SCHEDULE_CONFIG);
+  setScheduleConfig(safeSchedule(schedule));
 
-    if (myWeek) {
-      setMyWeeklyData(myWeek);
-    } else {
-      const initial = createInitialWeeklyData('Current Week (1)', 1, profile.track, 0);
-      setMyWeeklyData(initial);
-      await persistWeek(weekKeyFor(profile.name), initial);
-    }
-
-    if (partnerWeek) {
-      setPartnerWeeklyData(partnerWeek);
-    } else {
-      const initial = createInitialWeeklyData('Current Week (1)', 1, profile.partnerTrack, 0);
-      setPartnerWeeklyData(initial);
-    }
-
-    const cleanPast = (past || []).filter(
-      (rec) => rec.winnerName !== 'أحمد محمود' && rec.winnerName !== 'عمر خالد'
-    );
-    setPastWeeks(cleanPast);
+  if (myWeek) {
+    setMyWeeklyData(myWeek);
+  } else {
+    const initial = createInitialWeeklyData('Current Week (1)', 1, profile.track, 0);
+    setMyWeeklyData(initial);
+    await persistWeek(weekKeyFor(profile.name), initial);
   }
+
+  if (partnerWeek) {
+    setPartnerWeeklyData(partnerWeek);
+  } else {
+    const initial = createInitialWeeklyData('Current Week (1)', 1, profile.partnerTrack, 0);
+    setPartnerWeeklyData(initial);
+  }
+
+  const cleanPast = (past || []).filter(
+    (rec) => rec.winnerName !== 'أحمد محمود' && rec.winnerName !== 'عمر خالد'
+  );
+  setPastWeeks(cleanPast);
+}
 
   // تسجيل الدخول: يجلب أحدث نسخة من البروفايل من السيرفر (لا تسجيل دخول تلقائي محفوظ محلياً)
 const handleLoginProfile = async (updated: UserProfile) => {
@@ -136,37 +139,39 @@ const handleLoginProfile = async (updated: UserProfile) => {
   useEffect(() => {
     if (!userProfile || !supabaseReady) return;
 
-    const refreshWeeksAndSchedule = async () => {
-      const [myWeek, partnerWeek, schedule] = await Promise.all([
-        fetchRemoteWeek(weekKeyFor(userProfile.name)),
-        fetchRemoteWeek(weekKeyFor(userProfile.partnerName)),
-        fetchScheduleFromSupabase(),
-      ]);
-      if (myWeek) setMyWeeklyData(myWeek);
-      if (partnerWeek) setPartnerWeeklyData(partnerWeek);
-      if (schedule) setScheduleConfig(schedule);
-    };
+useEffect(() => {
+  if (!userProfile || !supabaseReady) return;
 
-    const refreshHistory = async () => {
-      const past = await fetchRemotePastWeeks();
-      if (past) setPastWeeks(past);
-    };
+  const refreshWeeksAndSchedule = async () => {
+    const [myWeek, partnerWeek, schedule] = await Promise.all([
+      fetchRemoteWeek(weekKeyFor(userProfile.name)),
+      fetchRemoteWeek(weekKeyFor(userProfile.partnerName)),
+      fetchScheduleFromSupabase(),
+    ]);
+    if (myWeek) setMyWeeklyData(myWeek);
+    if (partnerWeek) setPartnerWeeklyData(partnerWeek);
+    if (schedule) setScheduleConfig(safeSchedule(schedule));
+  };
 
-    const unsubWeeks = subscribeToTable('duotracker_weeks', refreshWeeksAndSchedule);
-    const unsubHistory = subscribeToTable('duotracker_history', refreshHistory);
+  const refreshHistory = async () => {
+    const past = await fetchRemotePastWeeks();
+    if (past) setPastWeeks(past);
+  };
 
-    // شبكة أمان: إعادة جلب دورية خفيفة من السيرفر فقط (وليست تخزيناً محلياً) في حال انقطاع القناة اللحظية
-    const interval = setInterval(() => {
-      refreshWeeksAndSchedule();
-      refreshHistory();
-    }, 15000);
+  const unsubWeeks = subscribeToTable('duotracker_weeks', refreshWeeksAndSchedule);
+  const unsubHistory = subscribeToTable('duotracker_history', refreshHistory);
 
-    return () => {
-      unsubWeeks();
-      unsubHistory();
-      clearInterval(interval);
-    };
-  }, [userProfile, supabaseReady]);
+  const interval = setInterval(() => {
+    refreshWeeksAndSchedule();
+    refreshHistory();
+  }, 15000);
+
+  return () => {
+    unsubWeeks();
+    unsubHistory();
+    clearInterval(interval);
+  };
+}, [userProfile, supabaseReady]);
 
   const latestWeek = pastWeeks.length > 0 ? pastWeeks[0] : null;
 
