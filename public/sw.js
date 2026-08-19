@@ -1,4 +1,4 @@
-const CACHE_NAME = 'duotracker-v4'; // غيّر النسخة عشان الكاش القديم يتشال
+const CACHE_NAME = 'duotracker-v4';
 const urlsToCache = ['/', '/index.html'];
 
 self.addEventListener('install', (event) => {
@@ -8,7 +8,9 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((names) => Promise.all(names.map((n) => (n !== CACHE_NAME ? caches.delete(n) : undefined))))
+    caches.keys().then((names) =>
+      Promise.all(names.map((n) => (n !== CACHE_NAME ? caches.delete(n) : undefined)))
+    )
   );
   self.clients.claim();
 });
@@ -22,8 +24,7 @@ self.addEventListener('fetch', (event) => {
       (async () => {
         try {
           const res = await fetch(req);
-          const resClone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone)).catch(() => {});
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, res.clone())).catch(() => {});
           return res;
         } catch {
           const cached = await caches.match(req);
@@ -40,8 +41,7 @@ self.addEventListener('fetch', (event) => {
       if (cached) return cached;
       const res = await fetch(req);
       try {
-        const resClone = res.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone)).catch(() => {});
+        caches.open(CACHE_NAME).then((cache) => cache.put(req, res.clone())).catch(() => {});
       } catch {}
       return res;
     })()
