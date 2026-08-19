@@ -188,36 +188,39 @@ const handleLoginProfile = async (updated: UserProfile) => {
     }
   };
 
-  const handleSwitchProfile = async () => {
-    if (!userProfile) return;
-    const swapped: UserProfile = {
-      ...userProfile,
-      id: userProfile.id === 'user_emy' ? 'user_youssef' : 'user_emy',
-      name: userProfile.partnerName,
-      partnerName: userProfile.name,
-      track: userProfile.partnerTrack,
-      partnerTrack: userProfile.track,
-      pin: userProfile.partnerPin,
-      partnerPin: userProfile.pin,
-    };
-
-    setIsLoadingData(true);
-    try {
-      const remote = (await fetchRemoteProfile(swapped.id)) || swapped;
-      const finalProfile: UserProfile = { ...remote, isLoggedIn: true };
-      setUserProfile(finalProfile);
-      await loadAllRemoteData(finalProfile);
-
-      confetti({
-        particleCount: 40,
-        spread: 50,
-        origin: { y: 0.1 },
-        colors: ['#8b5cf6', '#10b981', '#3b82f6'],
-      });
-    } finally {
-      setIsLoadingData(false);
-    }
+const handleSwitchProfile = async () => {
+  if (!userProfile) return;
+  const swapped: UserProfile = {
+    ...userProfile,
+    id: userProfile.id === 'user_emy' ? 'user_youssef' : 'user_emy',
+    name: userProfile.partnerName,
+    partnerName: userProfile.name,
+    track: userProfile.partnerTrack,
+    partnerTrack: userProfile.track,
+    pin: userProfile.partnerPin,
+    partnerPin: userProfile.pin,
   };
+
+  setIsLoadingData(true);
+  try {
+    const remote = (await fetchRemoteProfile(swapped.id)) || swapped;
+    const finalProfile: UserProfile = { ...remote, isLoggedIn: true };
+    setUserProfile(finalProfile);
+    await loadAllRemoteData(finalProfile);
+
+    confetti({
+      particleCount: 40,
+      spread: 50,
+      origin: { y: 0.1 },
+      colors: ['#8b5cf6', '#10b981', '#3b82f6'],
+    });
+  } catch (err) {
+    console.error('فشل تبديل الحساب:', err);
+    alert('حدث خطأ أثناء تحميل بيانات الحساب الآخر.');
+  } finally {
+    setIsLoadingData(false);
+  }
+};
 
   const handleResetNewWeek = async () => {
     if (!userProfile || !myWeeklyData || !partnerWeeklyData) return;
