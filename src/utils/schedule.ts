@@ -40,7 +40,7 @@ export function createPeriod(
 }
 
 function sortPeriods(periods: WeekPeriod[]): WeekPeriod[] {
-  return [...periods].sort((a, b) => a.startDate.localeCompare(b.startDate));
+  return Array.isArray(periods) ? [...periods].sort((a, b) => a.startDate.localeCompare(b.startDate)) : [];
 }
 
 export function addPeriod(config: WeekScheduleConfig, period: WeekPeriod): WeekScheduleConfig {
@@ -90,7 +90,7 @@ export function calculateCurrentWeekInfo(
   nowInput?: Date
 ): CurrentWeekCalculation {
   const now = nowInput || new Date();
-  const sorted = sortPeriods(config.periods || []);
+  const sorted = sortPeriods(config?.periods || []);
 
   if (sorted.length === 0) {
     return {
