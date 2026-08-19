@@ -6,6 +6,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PastWeekRecord, UserProfile, WeeklyData } from '../types';
+import { WeekScheduleConfig } from './schedule';
 
 export interface SupabaseConfig {
   url: string;
@@ -330,6 +331,68 @@ export async function testSupabaseConnection(): Promise<{ success: boolean; mess
     return { success: true, message: '✅ تم الاتصال واختبار الحفظ في Supabase بنجاح!' };
   } catch (err: any) {
     return { success: false, message: `❌ تعذر الاتصال: ${err.message || 'خطأ غير معروف'}` };
+  }
+}
+
+export function subscribeToTable(
+  table: 'duotracker_weeks' | 'duotracker_history' | 'duotracker_profiles',
+  onChange: () => void
+): () => void {
+  const client = getSupabaseClient();
+  if (!client) return () => {};
+
+  const channelName = `realtime-${table}-${Math.random().toString(36).slice(2, 8)}`;
+  const channel = client
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table },
+      () => {
+        onChange();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    client.removeChannel(channel);
+  };
+}
+
+export async function syncScheduleToSupabase(schedule: WeekScheduleConfig): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) return;
+
+  try {
+    const { error } = await client.from('duotracker_weeks').upsert({
+      id: 'schedule_config_global',
+      week_data: schedule,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) console.error('Supabase auto-sync schedule error:', error);
+  } catch (err) {
+    console.warn('Supabase auto-sync schedule failed:', err);
+  }
+}
+
+export async function fetchScheduleFromSupabase(): Promise<WeekScheduleConfig | null> {
+  const client = getSupabaseClient();
+  if (!client) return null;
+
+  try {
+    const { data, error } = await client
+      .from('duotracker_weeks')
+      .select('week_data')
+      .eq('id', 'schedule_config_global')
+      .maybeSingle();
+
+    if (error || !data) {
+      if (error) console.warn('Supabase fetch schedule error:', error);
+      return null;
+    }
+    return data.week_data as WeekScheduleConfig;
+  } catch (err) {
+    console.warn('Supabase fetch schedule failed:', err);
+    return null;
   }
 }
 
