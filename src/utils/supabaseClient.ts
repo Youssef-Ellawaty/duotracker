@@ -255,85 +255,6 @@ export async function fetchProfileFromSupabase(profileIdOrName: string): Promise
   }
 }
 
-export async function syncScheduleToSupabase(schedule: any): Promise<void> {
-  const client = getSupabaseClient();
-  if (!client) return;
-
-  try {
-    const { error } = await client.from('duotracker_weeks').upsert({
-      id: 'schedule_config_global',
-      week_data: schedule,
-      updated_at: new Date().toISOString(),
-    });
-    if (error) console.error('Supabase auto-sync schedule error:', error);
-  } catch (err) {
-    console.warn('Supabase auto-sync schedule failed:', err);
-  }
-}
-
-export async function fetchScheduleFromSupabase(): Promise<any | null> {
-  const client = getSupabaseClient();
-  if (!client) return null;
-
-  try {
-    const { data, error } = await client
-      .from('duotracker_weeks')
-      .select('week_data')
-      .eq('id', 'schedule_config_global')
-      .maybeSingle();
-
-    if (error || !data) {
-      if (error) console.warn('Supabase fetch schedule error:', error);
-      return null;
-    }
-    return data.week_data;
-  } catch (err) {
-    console.warn('Supabase fetch schedule failed:', err);
-    return null;
-  }
-}
-
-export async function testSupabaseConnection(): Promise<{ success: boolean; message: string }> {
-  const client = getSupabaseClient();
-  if (!client) {
-    return { success: false, message: 'رابط (URL) أو مفتاح (Anon Key) الخاص بـ Supabase غير مكتمل.' };
-  }
-
-  try {
-    const { error } = await client.from('duotracker_weeks').upsert({
-      id: 'connection_test',
-      week_data: { test: true, timestamp: new Date().toISOString() },
-      updated_at: new Date().toISOString(),
-    });
-
-    if (error) {
-      if (error.code === 'PGRST125' || error.message?.includes('Invalid path')) {
-        return {
-          success: false,
-          message: '❌ رابط Supabase غير صحيح! تم تلقائياً تصحيح المسار وإزالة أجزاء الرابط الزائدة. جرب الضغط على "حفظ واختبار الاتصال" مجدداً.',
-        };
-      }
-      if (error.code === 'PGRST205' || (error.message && (error.message.includes('relation') || error.message.includes('schema cache')))) {
-        return {
-          success: false,
-          message: '❌ جدول القواعد في Supabase غير كلي أو غير موجود بعد! الرجاء تشغيل كود SQL المطلوب في Supabase SQL Editor لإنشاء كافة الجداول.',
-        };
-      }
-      if (error.message.includes('permission') || error.message.includes('RLS') || error.code === '42501') {
-        return {
-          success: false,
-          message: '❌ تم حظر الكتابة بسبب Row Level Security (RLS)! يجب إضافة ALTER TABLE ... DISABLE ROW LEVEL SECURITY.',
-        };
-      }
-      return { success: false, message: `❌ خطأ في الاتصال: ${error.message}` };
-    }
-
-    return { success: true, message: '✅ تم الاتصال واختبار الحفظ في Supabase بنجاح!' };
-  } catch (err: any) {
-    return { success: false, message: `❌ تعذر الاتصال: ${err.message || 'خطأ غير معروف'}` };
-  }
-}
-
 export function subscribeToTable(
   table: 'duotracker_weeks' | 'duotracker_history' | 'duotracker_profiles',
   onChange: () => void
@@ -396,3 +317,43 @@ export async function fetchScheduleFromSupabase(): Promise<WeekScheduleConfig | 
   }
 }
 
+export async function testSupabaseConnection(): Promise<{ success: boolean; message: string }> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return { success: false, message: 'رابط (URL) أو مفتاح (Anon Key) الخاص بـ Supabase غير مكتمل.' };
+  }
+
+  try {
+    const { error } = await client.from('duotracker_weeks').upsert({
+      id: 'connection_test',
+      week_data: { test: true, timestamp: new Date().toISOString() },
+      updated_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      if (error.code === 'PGRST125' || error.message?.includes('Invalid path')) {
+        return {
+          success: false,
+          message: '❌ رابط Supabase غير صحيح! تم تلقائياً تصحيح المسار وإزالة أجزاء الرابط الزائدة. جرب الضغط على "حفظ واختبار الاتصال" مجدداً.',
+        };
+      }
+      if (error.code === 'PGRST205' || (error.message && (error.message.includes('relation') || error.message.includes('schema cache')))) {
+        return {
+          success: false,
+          message: '❌ جدول القواعد في Supabase غير كلي أو غير موجود بعد! الرجاء تشغيل كود SQL المطلوب في Supabase SQL Editor لإنشاء كافة الجداول.',
+        };
+      }
+      if (error.message.includes('permission') || error.message.includes('RLS') || error.code === '42501') {
+        return {
+          success: false,
+          message: '❌ تم حظر الكتابة بسبب Row Level Security (RLS)! يجب إضافة ALTER TABLE ... DISABLE ROW LEVEL SECURITY.',
+        };
+      }
+      return { success: false, message: `❌ خطأ في الاتصال: ${error.message}` };
+    }
+
+    return { success: true, message: '✅ تم الاتصال واختبار الحفظ في Supabase بنجاح!' };
+  } catch (err: any) {
+    return { success: false, message: `❌ تعذر الاتصال: ${err.message || 'خطأ غير معروف'}` };
+  }
+}
