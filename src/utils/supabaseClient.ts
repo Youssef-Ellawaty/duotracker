@@ -128,7 +128,7 @@ export async function syncWeekToSupabase(weekKey: string, weekData: WeeklyData):
   }
 }
 
-export async function fetchWeekFromSupabase(weekKey: string): Promise<WeeklyData | null> {
+export async function fetchScheduleFromSupabase(): Promise<WeekScheduleConfig | null> {
   const client = getSupabaseClient();
   if (!client) return null;
 
@@ -136,16 +136,21 @@ export async function fetchWeekFromSupabase(weekKey: string): Promise<WeeklyData
     const { data, error } = await client
       .from('duotracker_weeks')
       .select('week_data')
-      .eq('id', weekKey)
+      .eq('id', 'schedule_config_global')
       .maybeSingle();
 
     if (error || !data) {
-      if (error) console.warn('Supabase fetch week error:', error);
+      if (error) console.warn('Supabase fetch schedule error:', error);
       return null;
     }
-    return data.week_data as WeeklyData;
+
+    const weekData = data.week_data as WeekScheduleConfig;
+    if (!weekData || !Array.isArray(weekData.periods)) {
+      return { periods: [] };
+    }
+    return weekData;
   } catch (err) {
-    console.warn('Supabase fetch week failed:', err);
+    console.warn('Supabase fetch schedule failed:', err);
     return null;
   }
 }
