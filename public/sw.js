@@ -1,60 +1,43 @@
-const CACHE_NAME = 'duotracker-v3'; // 👈 غيّر هذا الرقم مع كل نشر مهم لإجبار تنظيف الكاش القديم
+const CACHE_NAME = 'duotracker-v3';
+const urlsToCache = ['/', '/index.html'];
 
-self.addEventListener('install', () => {
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(urlsToCache))
+  );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache);
-          }
-        })
-      );
-    })
+    caches.keys().then((cacheNames) =>
+      Promise.all(cacheNames.map((cache) => (cache !== CACHE_NAME ? caches.delete(cache) : undefined)))
+    )
   );
   self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
-  const { request } = event;
+  const req = event.request;
 
-  // لا تُخزّن صفحات HTML أبداً بنمط cache-first
-  // دايمًا اطلب النسخة الأحدث من الشبكة أولاً، والكاش فقط كخطة بديلة عند انقطاع النت
-  const isHTML =
-    request.mode === 'navigate' ||
-    (request.headers.get('accept') || '').includes('text/html');
+  // لا تتدخل إطلاقاً في أي طلب غير GET (مثل POST/PATCH لـ Supabase) أو أي طلب خارج نفس النطاق
+  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) {
+    return;
+  }
 
-  if (isHTML) {
+  // network-first لصفحة index.html نفسها لتفادي مشاكل الكاش القديم بعد أي نشر جديد
+  if (req.mode === 'navigate' || req.destination === 'document') {
     event.respondWith(
-      fetch(request)
-        .then((networkResponse) => {
-          const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          return networkResponse;
+      fetch(req)
+        .then((res) => {
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, res.clone()));
+          return res;
         })
-        .catch(() => caches.match(request))
+        .catch(() => caches.match(req))
     );
     return;
   }
 
-  // الملفات الثابتة (JS/CSS/الصور) عندها hash في الاسم، فآمن نستخدم لها stale-while-revalidate
-  event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      const fetchPromise = fetch(request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return networkResponse;
-        })
-        .catch(() => cachedResponse);
-
-      return cachedResponse || fetchPromise;
-    })
-  );
+  // باقي ملفات الواجهة الثابتة: cache-first عادي
+  event.respondWith(caches.match(req).then((res) => res || fetch(req)));
 });
