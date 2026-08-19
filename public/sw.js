@@ -1,43 +1,49 @@
-const CACHE_NAME = 'duotracker-v3';
+const CACHE_NAME = 'duotracker-v4'; // غيّر النسخة عشان الكاش القديم يتشال
 const urlsToCache = ['/', '/index.html'];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(urlsToCache))
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(urlsToCache)));
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) =>
-      Promise.all(cacheNames.map((cache) => (cache !== CACHE_NAME ? caches.delete(cache) : undefined)))
-    )
+    caches.keys().then((names) => Promise.all(names.map((n) => (n !== CACHE_NAME ? caches.delete(n) : undefined))))
   );
   self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
+  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
 
-  // لا تتدخل إطلاقاً في أي طلب غير GET (مثل POST/PATCH لـ Supabase) أو أي طلب خارج نفس النطاق
-  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) {
-    return;
-  }
-
-  // network-first لصفحة index.html نفسها لتفادي مشاكل الكاش القديم بعد أي نشر جديد
   if (req.mode === 'navigate' || req.destination === 'document') {
     event.respondWith(
-      fetch(req)
-        .then((res) => {
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, res.clone()));
+      (async () => {
+        try {
+          const res = await fetch(req);
+          const resClone = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone)).catch(() => {});
           return res;
-        })
-        .catch(() => caches.match(req))
+        } catch {
+          const cached = await caches.match(req);
+          return cached || Response.error();
+        }
+      })()
     );
     return;
   }
 
-  // باقي ملفات الواجهة الثابتة: cache-first عادي
-  event.respondWith(caches.match(req).then((res) => res || fetch(req)));
+  event.respondWith(
+    (async () => {
+      const cached = await caches.match(req);
+      if (cached) return cached;
+      const res = await fetch(req);
+      try {
+        const resClone = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone)).catch(() => {});
+      } catch {}
+      return res;
+    })()
+  );
 });
