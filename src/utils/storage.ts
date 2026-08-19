@@ -1,14 +1,16 @@
 import { PastWeekRecord, UserProfile, WeeklyData } from '../types';
 import { getSubjectsForTrack } from '../data/tracks';
 import { calculateWeeklyScore } from './scoreCalculator';
-import { syncPastWeeksToSupabase, syncProfileToSupabase, syncWeekToSupabase } from './supabaseClient';
+import {
+  syncPastWeeksToSupabase,
+  syncProfileToSupabase,
+  syncWeekToSupabase,
+  fetchPastWeeksFromSupabase,
+  fetchWeekFromSupabase,
+  fetchProfileFromSupabase,
+} from './supabaseClient';
 
-const PROFILE_KEY = 'duotracker_profile_v3';
-const MY_WEEK_KEY = 'duotracker_my_week_v3';
-const PARTNER_WEEK_KEY = 'duotracker_partner_week_v3';
-const PAST_WEEKS_KEY = 'duotracker_past_weeks_v3';
-
-// Default User Profile with preset accounts: Emy Ahmed & Youssef Ellawaty
+// حسابان فقط مسموح بهما في التطبيق بالكامل
 export const PRESET_USERS = {
   EMY: {
     id: 'user_emy',
@@ -32,12 +34,10 @@ export const PRESET_USERS = {
   },
 };
 
-export const DEFAULT_PROFILE: UserProfile = {
-  ...PRESET_USERS.EMY,
-  isLoggedIn: false, // Default unauthenticated to trigger login screen first
-};
+export function weekKeyFor(name: string): string {
+  return `week_${name.replace(/\s+/g, '_')}`;
+}
 
-// Default Initial Weekly Data Generator (Starts with 0 targets and 0 completed sessions)
 export function createInitialWeeklyData(
   weekTitle: string,
   weekNumber: number,
@@ -49,7 +49,7 @@ export function createInitialWeeklyData(
     subjectId: sub.id,
     subjectNameAr: sub.nameAr,
     subjectNameEn: sub.nameEn,
-    targetSessions: customTargetDefault, // Defaults to 0 for all subjects until user sets goals
+    targetSessions: customTargetDefault,
     completedSessions: 0,
     iconName: sub.iconName,
     color: sub.color,
@@ -75,124 +75,41 @@ export function createInitialWeeklyData(
   };
 }
 
-// Clean Empty Seed Past Weeks for Archives & Hall of Fame (No Mock Data)
 export const SEED_PAST_WEEKS: PastWeekRecord[] = [];
 
-// LocalStorage Handlers
-export function loadProfile(): UserProfile {
-  try {
-    const raw = localStorage.getItem(PROFILE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error('Failed to load profile', e);
-  }
-  return DEFAULT_PROFILE;
+/* ============ كل التخزين التالي يذهب مباشرة إلى Supabase — لا يوجد أي تخزين محلي ============ */
+
+export async function fetchRemoteProfile(profileIdOrName: string): Promise<UserProfile | null> {
+  return fetchProfileFromSupabase(profileIdOrName);
 }
 
-export function saveProfile(profile: UserProfile): void {
-  try {
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
-    // Trigger automatic background sync with Supabase
-    syncProfileToSupabase(profile);
-  } catch (e) {
-    console.error('Failed to save profile', e);
-  }
+export async function persistProfile(profile: UserProfile): Promise<void> {
+  await syncProfileToSupabase(profile);
 }
 
-export function loadMyWeek(track: 'SCI_MATH' | 'SCI_BIO'): WeeklyData {
-  try {
-    const raw = localStorage.getItem(MY_WEEK_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error('Failed to load my week', e);
-  }
-  const initial = createInitialWeeklyData('Current Week (1)', 1, track, 0);
-  saveMyWeek(initial);
-  return initial;
+export async function fetchRemoteWeek(weekKey: string): Promise<WeeklyData | null> {
+  return fetchWeekFromSupabase(weekKey);
 }
 
-export function saveMyWeek(data: WeeklyData, userProfileName?: string): void {
-  try {
-    const metrics = calculateWeeklyScore(data.subjectGoals);
-    const updated: WeeklyData = {
-      ...data,
-      totalTarget: metrics.totalTarget,
-      totalCompleted: metrics.totalCompleted,
-      completionRate: metrics.completionRate,
-      bonusPoints: metrics.bonusPoints,
-      finalScore: metrics.finalScore,
-      lastUpdated: new Date().toISOString(),
-    };
-    localStorage.setItem(MY_WEEK_KEY, JSON.stringify(updated));
-    // Trigger automatic background sync with Supabase with user-specific key
-    const userKey = userProfileName ? `week_${userProfileName.replace(/\s+/g, '_')}` : 'my_week';
-    syncWeekToSupabase(userKey, updated);
-  } catch (e) {
-    console.error('Failed to save my week', e);
-  }
+export async function persistWeek(weekKey: string, data: WeeklyData): Promise<WeeklyData> {
+  const metrics = calculateWeeklyScore(data.subjectGoals);
+  const updated: WeeklyData = {
+    ...data,
+    totalTarget: metrics.totalTarget,
+    totalCompleted: metrics.totalCompleted,
+    completionRate: metrics.completionRate,
+    bonusPoints: metrics.bonusPoints,
+    finalScore: metrics.finalScore,
+    lastUpdated: new Date().toISOString(),
+  };
+  await syncWeekToSupabase(weekKey, updated);
+  return updated;
 }
 
-export function loadPartnerWeek(partnerTrack: 'SCI_MATH' | 'SCI_BIO'): WeeklyData {
-  try {
-    const raw = localStorage.getItem(PARTNER_WEEK_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error('Failed to load partner week', e);
-  }
-  const initial = createInitialWeeklyData('Current Week (1)', 1, partnerTrack, 0);
-  savePartnerWeek(initial);
-  return initial;
+export async function fetchRemotePastWeeks(): Promise<PastWeekRecord[] | null> {
+  return fetchPastWeeksFromSupabase();
 }
 
-export function savePartnerWeek(data: WeeklyData, partnerProfileName?: string): void {
-  try {
-    const metrics = calculateWeeklyScore(data.subjectGoals);
-    const updated: WeeklyData = {
-      ...data,
-      totalTarget: metrics.totalTarget,
-      totalCompleted: metrics.totalCompleted,
-      completionRate: metrics.completionRate,
-      bonusPoints: metrics.bonusPoints,
-      finalScore: metrics.finalScore,
-      lastUpdated: new Date().toISOString(),
-    };
-    localStorage.setItem(PARTNER_WEEK_KEY, JSON.stringify(updated));
-    // Trigger automatic background sync with Supabase
-    const partnerKey = partnerProfileName ? `week_${partnerProfileName.replace(/\s+/g, '_')}` : 'partner_week';
-    syncWeekToSupabase(partnerKey, updated);
-  } catch (e) {
-    console.error('Failed to save partner week', e);
-  }
+export async function persistPastWeeks(pastWeeks: PastWeekRecord[]): Promise<void> {
+  await syncPastWeeksToSupabase(pastWeeks);
 }
-
-export function loadPastWeeks(): PastWeekRecord[] {
-  try {
-    const raw = localStorage.getItem(PAST_WEEKS_KEY);
-    if (raw) {
-      const parsed: PastWeekRecord[] = JSON.parse(raw);
-      // Clean out any legacy mock data records
-      const sanitized = parsed.filter(
-        (rec) =>
-          !rec.weekId.startsWith('week-archive-') &&
-          rec.winnerName !== 'أحمد محمود' &&
-          rec.winnerName !== 'عمر خالد'
-      );
-      return sanitized;
-    }
-  } catch (e) {
-    console.error('Failed to load past weeks', e);
-  }
-  savePastWeeks(SEED_PAST_WEEKS);
-  return SEED_PAST_WEEKS;
-}
-
-export function savePastWeeks(pastWeeks: PastWeekRecord[]): void {
-  try {
-    localStorage.setItem(PAST_WEEKS_KEY, JSON.stringify(pastWeeks));
-    // Trigger automatic background sync with Supabase
-    syncPastWeeksToSupabase(pastWeeks);
-  } catch (e) {
-    console.error('Failed to save past weeks', e);
-  }
-}
-
