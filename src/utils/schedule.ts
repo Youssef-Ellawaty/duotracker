@@ -1,133 +1,167 @@
-import { syncScheduleToSupabase, fetchScheduleFromSupabase } from './supabaseClient';
+import { syncScheduleToSupabase } from './supabaseClient';
 
-export interface WeekScheduleConfig {
-  isStarted: boolean;
-  startedBy: string;
-  week1StartDate: string; // "YYYY-MM-DD" e.g. "2026-08-15"
-  week1EndDate: string;   // "YYYY-MM-DD" e.g. "2026-08-22"
-  cutoffHour: number;     // 5 (5:00 AM)
+export interface WeekPeriod {
+  id: string;
+  name: string;        // اسم مخصص يضعه يوسف، مثال: "الأسبوع الأول" أو "أسبوع المراجعة النهائية"
+  startDate: string;   // "YYYY-MM-DD"
+  endDate: string;     // "YYYY-MM-DD" (اليوم الأخير ضمن الفترة)
+  cutoffHour: number;  // ساعة القطع (افتراضي 5 فجراً)
+  createdBy: string;
   createdAt: string;
 }
 
-const SCHEDULE_KEY = 'duotracker_schedule_v3';
-
-export const DEFAULT_SCHEDULE_CONFIG: WeekScheduleConfig = {
-  isStarted: false,
-  startedBy: 'Youssef Ellawaty',
-  week1StartDate: new Date().toISOString().split('T')[0],
-  week1EndDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-  cutoffHour: 5, // 5:00 AM
-  createdAt: new Date().toISOString(),
-};
-
-export function loadScheduleConfig(): WeekScheduleConfig {
-  try {
-    const raw = localStorage.getItem(SCHEDULE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error('Failed to load schedule config', e);
-  }
-  return DEFAULT_SCHEDULE_CONFIG;
+export interface WeekScheduleConfig {
+  periods: WeekPeriod[];
 }
 
-export function saveScheduleConfig(config: WeekScheduleConfig): void {
-  try {
-    localStorage.setItem(SCHEDULE_KEY, JSON.stringify(config));
-    // Trigger automatic background sync to Supabase
-    syncScheduleToSupabase(config);
-  } catch (e) {
-    console.error('Failed to save schedule config', e);
-  }
+export const EMPTY_SCHEDULE_CONFIG: WeekScheduleConfig = { periods: [] };
+
+/** يحفظ الجدول مباشرة على Supabase فقط — لا يوجد أي تخزين محلي */
+export function saveScheduleConfig(config: WeekScheduleConfig): Promise<void> {
+  return syncScheduleToSupabase(config);
+}
+
+export function createPeriod(
+  name: string,
+  startDate: string,
+  endDate: string,
+  createdBy: string,
+  cutoffHour: number = 5
+): WeekPeriod {
+  return {
+    id: `period-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: name.trim() || 'أسبوع بدون اسم',
+    startDate,
+    endDate,
+    cutoffHour,
+    createdBy,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function sortPeriods(periods: WeekPeriod[]): WeekPeriod[] {
+  return [...periods].sort((a, b) => a.startDate.localeCompare(b.startDate));
+}
+
+export function addPeriod(config: WeekScheduleConfig, period: WeekPeriod): WeekScheduleConfig {
+  return { periods: sortPeriods([...(config.periods || []), period]) };
+}
+
+export function updatePeriod(
+  config: WeekScheduleConfig,
+  periodId: string,
+  updates: Partial<Omit<WeekPeriod, 'id' | 'createdBy' | 'createdAt'>>
+): WeekScheduleConfig {
+  return {
+    periods: sortPeriods(
+      (config.periods || []).map((p) => (p.id === periodId ? { ...p, ...updates } : p))
+    ),
+  };
+}
+
+export function removePeriod(config: WeekScheduleConfig, periodId: string): WeekScheduleConfig {
+  return { periods: (config.periods || []).filter((p) => p.id !== periodId) };
 }
 
 export interface CurrentWeekCalculation {
-  isStarted: boolean;
-  isBeforeStart: boolean;
-  weekNumber: number;
+  hasActivePeriod: boolean;
+  isBetweenPeriods: boolean; // لا توجد فترة نشطة الآن (فجوة، أو لم تبدأ بعد، أو انتهت كل الفترات)
+  activePeriod: WeekPeriod | null;
+  nextPeriod: WeekPeriod | null;
+  ordinal: number; // ترتيب الفترة (للعرض فقط)
   weekTitle: string;
-  startDateFormatted: string; // e.g. "15/08 (05:00 AM)"
-  endDateFormatted: string;   // e.g. "23/08 (05:00 AM)"
-  rawStartDate: Date | null;
-  rawEndDate: Date | null;
+  startDateFormatted: string;
+  endDateFormatted: string;
   timeRemainingStr: string;
 }
 
-/**
- * Calculates current week details based on Youssef's schedule settings.
- * Cutoff is 5:00 AM on the day following week1EndDate.
- */
-export function calculateCurrentWeekInfo(config: WeekScheduleConfig, nowInput?: Date): CurrentWeekCalculation {
-  if (!config.isStarted) {
+function periodStart(p: WeekPeriod): Date {
+  const [y, m, d] = p.startDate.split('-').map(Number);
+  return new Date(y, m - 1, d, p.cutoffHour || 5, 0, 0, 0);
+}
+
+function periodEndCutoff(p: WeekPeriod): Date {
+  const [y, m, d] = p.endDate.split('-').map(Number);
+  return new Date(y, m - 1, d + 1, p.cutoffHour || 5, 0, 0, 0);
+}
+
+export function calculateCurrentWeekInfo(
+  config: WeekScheduleConfig,
+  nowInput?: Date
+): CurrentWeekCalculation {
+  const now = nowInput || new Date();
+  const sorted = sortPeriods(config.periods || []);
+
+  if (sorted.length === 0) {
     return {
-      isStarted: false,
-      isBeforeStart: false,
-      weekNumber: 1,
-      weekTitle: 'الأسبوع الأول (في انتظار البدء)',
+      hasActivePeriod: false,
+      isBetweenPeriods: false,
+      activePeriod: null,
+      nextPeriod: null,
+      ordinal: 0,
+      weekTitle: 'لم يتم تحديد أي فترة مذاكرة بعد',
       startDateFormatted: '--',
       endDateFormatted: '--',
-      rawStartDate: null,
-      rawEndDate: null,
       timeRemainingStr: '',
     };
   }
 
-  const now = nowInput || new Date();
+  for (let i = 0; i < sorted.length; i++) {
+    const p = sorted[i];
+    const start = periodStart(p);
+    const end = periodEndCutoff(p);
 
-  // Week 1 Start Timestamp: StartDate + 05:00:00
-  const [sYear, sMonth, sDay] = config.week1StartDate.split('-').map(Number);
-  const week1Start = new Date(sYear, sMonth - 1, sDay, config.cutoffHour || 5, 0, 0, 0);
+    if (now.getTime() >= start.getTime() && now.getTime() < end.getTime()) {
+      const timeToNextMs = end.getTime() - now.getTime();
+      const diffDays = Math.floor(timeToNextMs / (1000 * 60 * 60 * 24));
+      const diffHours = Math.floor((timeToNextMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
 
-  // Week 1 End Timestamp: EndDate + 1 day at 05:00:00 (taking 5 hours from next day as specified)
-  const [eYear, eMonth, eDay] = config.week1EndDate.split('-').map(Number);
-  const week1EndCutoff = new Date(eYear, eMonth - 1, eDay + 1, config.cutoffHour || 5, 0, 0, 0);
+      return {
+        hasActivePeriod: true,
+        isBetweenPeriods: false,
+        activePeriod: p,
+        nextPeriod: sorted[i + 1] || null,
+        ordinal: i + 1,
+        weekTitle: p.name,
+        startDateFormatted: formatDateWithCutoff(start),
+        endDateFormatted: formatDateWithCutoff(end),
+        timeRemainingStr: `${diffDays} يوم و ${diffHours} ساعة`,
+      };
+    }
+  }
 
-  const durationMs = Math.max(
-    24 * 60 * 60 * 1000,
-    week1EndCutoff.getTime() - week1Start.getTime()
-  );
-
-  // Case 1: Current time is before Week 1 official start
-  if (now.getTime() < week1Start.getTime()) {
-    const diffMs = week1Start.getTime() - now.getTime();
+  const upcoming = sorted.find((p) => periodStart(p).getTime() > now.getTime());
+  if (upcoming) {
+    const start = periodStart(upcoming);
+    const end = periodEndCutoff(upcoming);
+    const diffMs = start.getTime() - now.getTime();
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
     const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
     return {
-      isStarted: true,
-      isBeforeStart: true,
-      weekNumber: 1,
-      weekTitle: 'الأسبوع الأول (ينطلق قريباً)',
-      startDateFormatted: formatDateWithCutoff(week1Start),
-      endDateFormatted: formatDateWithCutoff(week1EndCutoff),
-      rawStartDate: week1Start,
-      rawEndDate: week1EndCutoff,
+      hasActivePeriod: false,
+      isBetweenPeriods: true,
+      activePeriod: null,
+      nextPeriod: upcoming,
+      ordinal: sorted.indexOf(upcoming) + 1,
+      weekTitle: `${upcoming.name} (ينطلق قريباً)`,
+      startDateFormatted: formatDateWithCutoff(start),
+      endDateFormatted: formatDateWithCutoff(end),
       timeRemainingStr: `${diffDays} يوم و ${diffHours} ساعة و ${diffMins} دقيقة`,
     };
   }
 
-  // Case 2: Week 1 has started. Calculate current week number
-  const elapsedMs = now.getTime() - week1Start.getTime();
-  const weekIndex = Math.floor(elapsedMs / durationMs); // 0 = Week 1, 1 = Week 2, etc.
-  const weekNumber = 1 + weekIndex;
-
-  const currentWeekStart = new Date(week1Start.getTime() + weekIndex * durationMs);
-  const currentWeekEnd = new Date(week1Start.getTime() + (weekIndex + 1) * durationMs);
-
-  const timeToNextMs = currentWeekEnd.getTime() - now.getTime();
-  const diffDays = Math.floor(timeToNextMs / (1000 * 60 * 60 * 24));
-  const diffHours = Math.floor((timeToNextMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-
   return {
-    isStarted: true,
-    isBeforeStart: false,
-    weekNumber,
-    weekTitle: `الأسبوع ${weekNumber}`,
-    startDateFormatted: formatDateWithCutoff(currentWeekStart),
-    endDateFormatted: formatDateWithCutoff(currentWeekEnd),
-    rawStartDate: currentWeekStart,
-    rawEndDate: currentWeekEnd,
-    timeRemainingStr: `${diffDays} يوم و ${diffHours} ساعة`,
+    hasActivePeriod: false,
+    isBetweenPeriods: true,
+    activePeriod: null,
+    nextPeriod: null,
+    ordinal: sorted.length,
+    weekTitle: 'لا توجد فترة نشطة حالياً - بانتظار تحديد فترة جديدة من يوسف',
+    startDateFormatted: '--',
+    endDateFormatted: '--',
+    timeRemainingStr: '',
   };
 }
 
