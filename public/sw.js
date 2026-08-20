@@ -1,5 +1,5 @@
-const CACHE_NAME = 'duotracker-v5';
-const urlsToCache = ['/', '/index.html'];
+const CACHE_NAME = 'duotracker-v6';
+const urlsToCache = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/icon-maskable.png', '/favicon.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(urlsToCache)));

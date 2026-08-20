@@ -1,20 +1,40 @@
 {
+  "id": "/",
   "short_name": "DuoTracker",
   "name": "DuoTracker - Partner Study Goal Tracker",
+  "description": "تطبيق DuoTracker لمتابعة وتحدي أهداف المذاكرة الأسبوعية",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0f19",
+  "theme_color": "#0b0f19",
+  "dir": "rtl",
+  "lang": "ar",
   "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    },
     {
       "src": "/icon.svg",
       "type": "image/svg+xml",
-      "sizes": "512x512 192x192 any",
-      "purpose": "any maskable"
+      "sizes": "any",
+      "purpose": "any"
     }
-  ],
-  "start_url": "/",
-  "background_color": "#0b0f19",
-  "theme_color": "#0b0f19",
-  "display": "standalone",
-  "orientation": "portrait",
-  "dir": "rtl",
-  "lang": "ar",
-  "description": "تطبيق DuoTracker لمتابعة وتحدي أهداف المذاكرة الأسبوعية"
+  ]
 }
