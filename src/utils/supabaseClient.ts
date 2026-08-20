@@ -300,28 +300,6 @@ export async function syncScheduleToSupabase(schedule: WeekScheduleConfig): Prom
   }
 }
 
-export async function fetchScheduleFromSupabase(): Promise<WeekScheduleConfig | null> {
-  const client = getSupabaseClient();
-  if (!client) return null;
-
-  try {
-    const { data, error } = await client
-      .from('duotracker_weeks')
-      .select('week_data')
-      .eq('id', 'schedule_config_global')
-      .maybeSingle();
-
-    if (error || !data) {
-      if (error) console.warn('Supabase fetch schedule error:', error);
-      return null;
-    }
-    return data.week_data as WeekScheduleConfig;
-  } catch (err) {
-    console.warn('Supabase fetch schedule failed:', err);
-    return null;
-  }
-}
-
 export async function testSupabaseConnection(): Promise<{ success: boolean; message: string }> {
   const client = getSupabaseClient();
   if (!client) {
