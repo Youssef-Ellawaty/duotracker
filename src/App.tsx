@@ -1,5 +1,5 @@
 /**
- * DuoTracker - شخصان فقط، مزامنة لحظية عبر Supabase، بدون أي تخزين محلي للبيانات.
+ * DuoTracker - مزامنة لحظية سحابية كاملة عبر Google Firebase Firestore.
  */
 
 import React, { useEffect, useState } from 'react';
@@ -11,7 +11,7 @@ import { HistoryView } from './components/Views/HistoryView';
 import { HallOfFameView } from './components/Views/HallOfFameView';
 import { LoginModal } from './components/LoginModal';
 import { WeeklyGoalSetupModal } from './components/WeeklyGoalSetupModal';
-import { SupabaseConfigModal } from './components/SupabaseConfigModal';
+import { FirebaseConfigModal } from './components/FirebaseConfigModal';
 import { PastWeekRecord, TabView, UserProfile, WeeklyData } from './types';
 import {
   PRESET_USERS,
@@ -39,10 +39,10 @@ import {
   saveScheduleConfig,
 } from './utils/schedule';
 import {
-  getSupabaseConfig,
-  fetchScheduleFromSupabase,
-  subscribeToTable,
-} from './utils/supabaseClient';
+  getFirebaseConfig,
+  fetchScheduleFromFirebase,
+  subscribeToFirebaseDoc,
+} from './utils/firebaseClient';
 
 const safeSchedule = (s: any): WeekScheduleConfig =>
   s && Array.isArray(s.periods) ? s : EMPTY_SCHEDULE_CONFIG;
@@ -50,7 +50,7 @@ const safeSchedule = (s: any): WeekScheduleConfig =>
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabView>('MY_WEEK');
 
-  const [supabaseReady, setSupabaseReady] = useState(false);
+  const [firebaseReady, setFirebaseReady] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(false);
 
@@ -61,70 +61,73 @@ export default function App() {
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(true);
   const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
-  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
+  const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState(false);
 
   const currentWeekInfo = calculateCurrentWeekInfo(scheduleConfig);
 
-  // التحقق من إعداد Supabase عند فتح التطبيق (لا وجود لأي بيانات بدون سيرفر)
+  // التحقق من إعداد Firebase عند فتح التطبيق
   useEffect(() => {
-    const cfg = getSupabaseConfig();
-    setSupabaseReady(cfg.isConnected);
-    if (!cfg.isConnected) setIsSupabaseModalOpen(true);
+    const cfg = getFirebaseConfig();
+    setFirebaseReady(cfg.isConnected);
   }, []);
 
-async function loadAllRemoteData(profile: UserProfile) {
-  const [schedule, myWeek, partnerWeek, past] = await Promise.all([
-    fetchScheduleFromSupabase(),
-    fetchRemoteWeek(weekKeyFor(profile.name)),
-    fetchRemoteWeek(weekKeyFor(profile.partnerName)),
-    fetchRemotePastWeeks(),
-  ]);
+  async function loadAllRemoteData(profile: UserProfile) {
+    try {
+      const [schedule, myWeek, partnerWeek, past] = await Promise.all([
+        fetchScheduleFromFirebase(),
+        fetchRemoteWeek(weekKeyFor(profile.name)),
+        fetchRemoteWeek(weekKeyFor(profile.partnerName)),
+        fetchRemotePastWeeks(),
+      ]);
 
-  setScheduleConfig(safeSchedule(schedule));
+      if (schedule) {
+        setScheduleConfig(safeSchedule(schedule));
+      }
 
-  if (myWeek) {
-    setMyWeeklyData(myWeek);
-  } else {
-    const initial = createInitialWeeklyData('Current Week (1)', 1, profile.track, 0);
-    setMyWeeklyData(initial);
-    await persistWeek(weekKeyFor(profile.name), initial);
+      if (myWeek) {
+        setMyWeeklyData(myWeek);
+      } else {
+        const initial = createInitialWeeklyData('Current Week (1)', 1, profile.track, 0);
+        setMyWeeklyData(initial);
+        await persistWeek(weekKeyFor(profile.name), initial);
+      }
+
+      if (partnerWeek) {
+        setPartnerWeeklyData(partnerWeek);
+      } else {
+        const initial = createInitialWeeklyData('Current Week (1)', 1, profile.partnerTrack, 0);
+        setPartnerWeeklyData(initial);
+        await persistWeek(weekKeyFor(profile.partnerName), initial);
+      }
+
+      const cleanPast = (past || []).filter(
+        (rec) => rec.winnerName !== 'أحمد محمود' && rec.winnerName !== 'عمر خالد'
+      );
+      setPastWeeks(cleanPast);
+    } catch (e) {
+      console.error('Error loading remote data:', e);
+    }
   }
 
-  if (partnerWeek) {
-    setPartnerWeeklyData(partnerWeek);
-  } else {
-    const initial = createInitialWeeklyData('Current Week (1)', 1, profile.partnerTrack, 0);
-    setPartnerWeeklyData(initial);
-  }
-
-  const cleanPast = (past || []).filter(
-    (rec) => rec.winnerName !== 'أحمد محمود' && rec.winnerName !== 'عمر خالد'
-  );
-  setPastWeeks(cleanPast);
-}
-
-  // تسجيل الدخول: يجلب أحدث نسخة من البروفايل من السيرفر (لا تسجيل دخول تلقائي محفوظ محلياً)
-const handleLoginProfile = async (updated: UserProfile) => {
-  if (!supabaseReady) {
-    setIsSupabaseModalOpen(true);
-    return;
-  }
-  setIsLoadingData(true);
-  try {
-    const remote = (await fetchRemoteProfile(updated.id)) || updated;
-    const finalProfile: UserProfile = { ...remote, isLoggedIn: true };
-    setUserProfile(finalProfile);
-    await persistProfile(finalProfile);
-    await loadAllRemoteData(finalProfile);
-  } catch (err) {
-    console.error('فشل تحميل بيانات تسجيل الدخول:', err);
-    alert('حدث خطأ أثناء تحميل بياناتك من Supabase. تحقق من الاتصال أو من إعدادات الجداول.');
-  } finally {
-    // هذا السطر لازم يشتغل دايماً، بغض النظر عن نجاح أو فشل التحميل
-    setIsLoginModalOpen(false);
-    setIsLoadingData(false);
-  }
-};
+  // تسجيل الدخول: يجلب أحدث نسخة من البروفايل من السيرفر
+  const handleLoginProfile = async (updated: UserProfile) => {
+    setIsLoadingData(true);
+    try {
+      const remote = (await fetchRemoteProfile(updated.id)) || updated;
+      const finalProfile: UserProfile = { ...remote, isLoggedIn: true };
+      setUserProfile(finalProfile);
+      await persistProfile(finalProfile);
+      await loadAllRemoteData(finalProfile);
+    } catch (err) {
+      console.error('فشل تحميل بيانات تسجيل الدخول:', err);
+      // Fallback cleanly to entered profile so user is not blocked
+      setUserProfile({ ...updated, isLoggedIn: true });
+      await loadAllRemoteData(updated);
+    } finally {
+      setIsLoginModalOpen(false);
+      setIsLoadingData(false);
+    }
+  };
 
   const handleLogout = () => {
     setUserProfile(null);
@@ -135,43 +138,51 @@ const handleLoginProfile = async (updated: UserProfile) => {
     setIsLoginModalOpen(true);
   };
 
-  // اشتراك المزامنة اللحظية: أي تعديل من أي جهاز (الشريك أو نفس الشخص من جهاز آخر) ينعكس فوراً
+  // اشتراك المزامنة اللحظية الفورية مع Firestore (onSnapshot)
   useEffect(() => {
-    if (!userProfile || !supabaseReady) return;
+    if (!userProfile) return;
 
-useEffect(() => {
-  if (!userProfile || !supabaseReady) return;
+    const myKey = weekKeyFor(userProfile.name);
+    const partnerKey = weekKeyFor(userProfile.partnerName);
 
-  const refreshWeeksAndSchedule = async () => {
-    const [myWeek, partnerWeek, schedule] = await Promise.all([
-      fetchRemoteWeek(weekKeyFor(userProfile.name)),
-      fetchRemoteWeek(weekKeyFor(userProfile.partnerName)),
-      fetchScheduleFromSupabase(),
-    ]);
-    if (myWeek) setMyWeeklyData(myWeek);
-    if (partnerWeek) setPartnerWeeklyData(partnerWeek);
-    if (schedule) setScheduleConfig(safeSchedule(schedule));
-  };
+    // 1. مزامنة أسبوعي لحظياً
+    const unsubMyWeek = subscribeToFirebaseDoc('duotracker_weeks', myKey, (data) => {
+      if (data?.week_data) {
+        setMyWeeklyData(data.week_data);
+      }
+    });
 
-  const refreshHistory = async () => {
-    const past = await fetchRemotePastWeeks();
-    if (past) setPastWeeks(past);
-  };
+    // 2. مزامنة أسبوع الشريك لحظياً
+    const unsubPartnerWeek = subscribeToFirebaseDoc('duotracker_weeks', partnerKey, (data) => {
+      if (data?.week_data) {
+        setPartnerWeeklyData(data.week_data);
+      }
+    });
 
-  const unsubWeeks = subscribeToTable('duotracker_weeks', refreshWeeksAndSchedule);
-  const unsubHistory = subscribeToTable('duotracker_history', refreshHistory);
+    // 3. مزامنة جدول الفترات لحظياً
+    const unsubSchedule = subscribeToFirebaseDoc('duotracker_weeks', 'schedule_config_global', (data) => {
+      if (data?.week_data) {
+        setScheduleConfig(safeSchedule(data.week_data));
+      }
+    });
 
-  const interval = setInterval(() => {
-    refreshWeeksAndSchedule();
-    refreshHistory();
-  }, 15000);
+    // 4. مزامنة أرشيف الأسابيع والبطولات لحظياً
+    const unsubHistory = subscribeToFirebaseDoc('duotracker_history', 'past_weeks_global', (data) => {
+      if (data?.records) {
+        const cleanPast = (data.records as PastWeekRecord[]).filter(
+          (rec) => rec.winnerName !== 'أحمد محمود' && rec.winnerName !== 'عمر خالد'
+        );
+        setPastWeeks(cleanPast);
+      }
+    });
 
-  return () => {
-    unsubWeeks();
-    unsubHistory();
-    clearInterval(interval);
-  };
-}, [userProfile, supabaseReady]);
+    return () => {
+      unsubMyWeek();
+      unsubPartnerWeek;
+      unsubSchedule();
+      unsubHistory();
+    };
+  }, [userProfile]);
 
   const latestWeek = pastWeeks.length > 0 ? pastWeeks[0] : null;
 
@@ -182,57 +193,45 @@ useEffect(() => {
     setMyWeeklyData(saved);
   };
 
-  const handleSaveProfile = async (updated: UserProfile) => {
-    setUserProfile(updated);
-    await persistProfile(updated);
+  const handleSwitchProfile = async () => {
+    if (!userProfile) return;
+    const swapped: UserProfile = {
+      ...userProfile,
+      id: userProfile.id === 'user_emy' ? 'user_youssef' : 'user_emy',
+      name: userProfile.partnerName,
+      partnerName: userProfile.name,
+      track: userProfile.partnerTrack,
+      partnerTrack: userProfile.track,
+      pin: userProfile.partnerPin,
+      partnerPin: userProfile.pin,
+    };
 
-    if (myWeeklyData && updated.track !== userProfile?.track) {
-      const refreshedMy = createInitialWeeklyData(myWeeklyData.weekTitle, myWeeklyData.weekNumber, updated.track);
-      const saved = await persistWeek(weekKeyFor(updated.name), refreshedMy);
-      setMyWeeklyData(saved);
+    setIsLoadingData(true);
+    try {
+      const remote = (await fetchRemoteProfile(swapped.id)) || swapped;
+      const finalProfile: UserProfile = { ...remote, isLoggedIn: true };
+      setUserProfile(finalProfile);
+      await loadAllRemoteData(finalProfile);
+
+      confetti({
+        particleCount: 40,
+        spread: 50,
+        origin: { y: 0.1 },
+        colors: ['#8b5cf6', '#10b981', '#3b82f6'],
+      });
+    } catch (err) {
+      console.error('فشل تبديل الحساب:', err);
+    } finally {
+      setIsLoadingData(false);
     }
   };
-
-const handleSwitchProfile = async () => {
-  if (!userProfile) return;
-  const swapped: UserProfile = {
-    ...userProfile,
-    id: userProfile.id === 'user_emy' ? 'user_youssef' : 'user_emy',
-    name: userProfile.partnerName,
-    partnerName: userProfile.name,
-    track: userProfile.partnerTrack,
-    partnerTrack: userProfile.track,
-    pin: userProfile.partnerPin,
-    partnerPin: userProfile.pin,
-  };
-
-  setIsLoadingData(true);
-  try {
-    const remote = (await fetchRemoteProfile(swapped.id)) || swapped;
-    const finalProfile: UserProfile = { ...remote, isLoggedIn: true };
-    setUserProfile(finalProfile);
-    await loadAllRemoteData(finalProfile);
-
-    confetti({
-      particleCount: 40,
-      spread: 50,
-      origin: { y: 0.1 },
-      colors: ['#8b5cf6', '#10b981', '#3b82f6'],
-    });
-  } catch (err) {
-    console.error('فشل تبديل الحساب:', err);
-    alert('حدث خطأ أثناء تحميل بيانات الحساب الآخر.');
-  } finally {
-    setIsLoadingData(false);
-  }
-};
 
   const handleResetNewWeek = async () => {
     if (!userProfile || !myWeeklyData || !partnerWeeklyData) return;
 
     if (
       !window.confirm(
-        'Are you sure you want to finish the current period, archive performance records to the Hall of Fame, and reset weekly goals?'
+        'هل أنت متأكد من إنهاء الفترة الحالية وأرشفة النتائج في حائط البطولات وبدء أسبوع جديد؟'
       )
     ) {
       return;
@@ -335,36 +334,10 @@ const handleSwitchProfile = async () => {
   };
 
   // ----- شاشات الحالة -----
-  if (!supabaseReady) {
-    return (
-      <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col items-center justify-center gap-4 p-6 text-center">
-        <h1 className="text-xl font-black text-white">التطبيق يحتاج اتصال Supabase ليعمل</h1>
-        <p className="text-sm text-slate-400 max-w-md">
-          حتى تتم مزامنة البيانات لحظياً بين جهازي إيمي ويوسف بدون أي حفظ محلي، يجب ربط قاعدة بيانات Supabase أولاً.
-          يُفضّل ضبط <code>VITE_SUPABASE_URL</code> و<code>VITE_SUPABASE_ANON_KEY</code> كمتغيرات بيئة على Vercel.
-        </p>
-        <button
-          onClick={() => setIsSupabaseModalOpen(true)}
-          className="px-5 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-bold text-sm"
-        >
-          فتح إعدادات الربط
-        </button>
-        <SupabaseConfigModal
-          isOpen={isSupabaseModalOpen}
-          onClose={() => {
-            setIsSupabaseModalOpen(false);
-            const cfg = getSupabaseConfig();
-            setSupabaseReady(cfg.isConnected);
-          }}
-        />
-      </div>
-    );
-  }
-
   if (!userProfile || isLoadingData) {
     return (
       <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col items-center justify-center gap-4">
-        {isLoadingData && <p className="text-sm text-slate-400">جاري تحميل بياناتك من السيرفر...</p>}
+        {isLoadingData && <p className="text-sm text-slate-400 font-['Cairo']">جاري مزامنة بياناتك سحابياً من Firebase...</p>}
         <LoginModal
           isOpen={isLoginModalOpen}
           onClose={() => setIsLoginModalOpen(false)}
@@ -383,7 +356,7 @@ const handleSwitchProfile = async () => {
   if (!myWeeklyData || !partnerWeeklyData) {
     return (
       <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex items-center justify-center">
-        <p className="text-sm text-slate-400">جاري تحميل بيانات الأسبوع...</p>
+        <p className="text-sm text-slate-400 font-['Cairo']">جاري تحميل بيانات الأسبوع...</p>
       </div>
     );
   }
@@ -395,7 +368,7 @@ const handleSwitchProfile = async () => {
         setActiveTab={setActiveTab}
         userProfile={userProfile}
         onOpenLoginModal={() => setIsLoginModalOpen(true)}
-        onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
+        onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
         onSwitchProfile={handleSwitchProfile}
         onResetNewWeek={handleResetNewWeek}
         onLogout={handleLogout}
@@ -467,7 +440,10 @@ const handleSwitchProfile = async () => {
         onSaveWeeklyGoals={handleUpdateMyWeek}
       />
 
-      <SupabaseConfigModal isOpen={isSupabaseModalOpen} onClose={() => setIsSupabaseModalOpen(false)} />
+      <FirebaseConfigModal
+        isOpen={isFirebaseModalOpen}
+        onClose={() => setIsFirebaseModalOpen(false)}
+      />
     </div>
   );
 }

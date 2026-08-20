@@ -5,12 +5,11 @@ import {
   Users,
   Archive,
   Trophy,
-  UserCheck,
   RotateCcw,
-  Database,
   Sparkles,
   Zap,
   LogOut,
+  Flame,
 } from 'lucide-react';
 import { TabView, UserProfile } from '../types';
 
@@ -19,7 +18,7 @@ interface NavbarProps {
   setActiveTab: (tab: TabView) => void;
   userProfile: UserProfile;
   onOpenLoginModal: () => void;
-  onOpenSupabaseModal?: () => void;
+  onOpenFirebaseModal?: () => void;
   onSwitchProfile: () => void;
   onResetNewWeek: () => void;
   onLogout: () => void;
@@ -30,7 +29,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   setActiveTab,
   userProfile,
   onOpenLoginModal,
-  onOpenSupabaseModal,
+  onOpenFirebaseModal,
   onSwitchProfile,
   onResetNewWeek,
   onLogout,
@@ -123,10 +122,22 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* User Controls & Profile Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Firebase Live Server Status Button */}
+            {onOpenFirebaseModal && (
+              <button
+                onClick={onOpenFirebaseModal}
+                className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/30 transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+                title="Firebase Cloud Database Status"
+              >
+                <Flame className="w-3.5 h-3.5 text-amber-400 fill-amber-400/20" />
+                <span className="hidden sm:inline text-[11px] text-emerald-400">Firebase Live</span>
+              </button>
+            )}
+
             {/* Reset Week Button */}
             <button
               onClick={onResetNewWeek}
-              className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-colors hidden md:flex items-center gap-1.5 text-xs font-semibold"
+              className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-colors hidden md:flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
               title="Archive current week and start a new week"
             >
               <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
@@ -152,7 +163,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Logout Button */}
             <button
               onClick={onLogout}
-              className="p-1.5 sm:p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition-colors shrink-0"
+              className="p-1.5 sm:p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition-colors shrink-0 cursor-pointer"
               title="Log out from account"
             >
               <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-400" />

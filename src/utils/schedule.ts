@@ -1,4 +1,4 @@
-import { syncScheduleToSupabase } from './supabaseClient';
+import { syncScheduleToFirebase } from './firebaseClient';
 
 export interface WeekPeriod {
   id: string;
@@ -16,9 +16,9 @@ export interface WeekScheduleConfig {
 
 export const EMPTY_SCHEDULE_CONFIG: WeekScheduleConfig = { periods: [] };
 
-/** يحفظ الجدول مباشرة على Supabase فقط — لا يوجد أي تخزين محلي */
+/** يحفظ الجدول مباشرة على Firebase Firestore فقط — لا يوجد أي تخزين محلي */
 export function saveScheduleConfig(config: WeekScheduleConfig): Promise<void> {
-  return syncScheduleToSupabase(config);
+  return syncScheduleToFirebase(config);
 }
 
 export function createPeriod(
@@ -171,30 +171,4 @@ function formatDateWithCutoff(d: Date): string {
   const hours = String(d.getHours()).padStart(2, '0');
   const mins = String(d.getMinutes()).padStart(2, '0');
   return `${day}/${month} الساعة ${hours}:${mins} فجراً`;
-}
-
-// src/utils/schedule.ts
-
-function safePeriodsArray(periods: unknown): WeekPeriod[] {
-  return Array.isArray(periods) ? (periods as WeekPeriod[]) : [];
-}
-
-export function addPeriod(config: WeekScheduleConfig, period: WeekPeriod): WeekScheduleConfig {
-  return { periods: sortPeriods([...safePeriodsArray(config.periods), period]) };
-}
-
-export function updatePeriod(
-  config: WeekScheduleConfig,
-  periodId: string,
-  updates: Partial<Omit<WeekPeriod, 'id' | 'createdBy' | 'createdAt'>>
-): WeekScheduleConfig {
-  return {
-    periods: sortPeriods(
-      safePeriodsArray(config.periods).map((p) => (p.id === periodId ? { ...p, ...updates } : p))
-    ),
-  };
-}
-
-export function removePeriod(config: WeekScheduleConfig, periodId: string): WeekScheduleConfig {
-  return { periods: safePeriodsArray(config.periods).filter((p) => p.id !== periodId) };
 }

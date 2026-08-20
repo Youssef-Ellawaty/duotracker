@@ -2,13 +2,13 @@ import { PastWeekRecord, UserProfile, WeeklyData } from '../types';
 import { getSubjectsForTrack } from '../data/tracks';
 import { calculateWeeklyScore } from './scoreCalculator';
 import {
-  syncPastWeeksToSupabase,
-  syncProfileToSupabase,
-  syncWeekToSupabase,
-  fetchPastWeeksFromSupabase,
-  fetchWeekFromSupabase,
-  fetchProfileFromSupabase,
-} from './supabaseClient';
+  syncPastWeeksToFirebase,
+  syncProfileToFirebase,
+  syncWeekToFirebase,
+  fetchPastWeeksFromFirebase,
+  fetchWeekFromFirebase,
+  fetchProfileFromFirebase,
+} from './firebaseClient';
 
 // حسابان فقط مسموح بهما في التطبيق بالكامل
 export const PRESET_USERS = {
@@ -77,18 +77,18 @@ export function createInitialWeeklyData(
 
 export const SEED_PAST_WEEKS: PastWeekRecord[] = [];
 
-/* ============ كل التخزين التالي يذهب مباشرة إلى Supabase — لا يوجد أي تخزين محلي ============ */
+/* ============ كل التخزين التالي يذهب مباشرة إلى Firebase Firestore — لا يوجد أي تخزين محلي ============ */
 
 export async function fetchRemoteProfile(profileIdOrName: string): Promise<UserProfile | null> {
-  return fetchProfileFromSupabase(profileIdOrName);
+  return fetchProfileFromFirebase(profileIdOrName);
 }
 
 export async function persistProfile(profile: UserProfile): Promise<void> {
-  await syncProfileToSupabase(profile);
+  await syncProfileToFirebase(profile);
 }
 
 export async function fetchRemoteWeek(weekKey: string): Promise<WeeklyData | null> {
-  return fetchWeekFromSupabase(weekKey);
+  return fetchWeekFromFirebase(weekKey);
 }
 
 export async function persistWeek(weekKey: string, data: WeeklyData): Promise<WeeklyData> {
@@ -102,14 +102,15 @@ export async function persistWeek(weekKey: string, data: WeeklyData): Promise<We
     finalScore: metrics.finalScore,
     lastUpdated: new Date().toISOString(),
   };
-  await syncWeekToSupabase(weekKey, updated);
+  await syncWeekToFirebase(weekKey, updated);
   return updated;
 }
 
 export async function fetchRemotePastWeeks(): Promise<PastWeekRecord[] | null> {
-  return fetchPastWeeksFromSupabase();
+  return fetchPastWeeksFromFirebase();
 }
 
 export async function persistPastWeeks(pastWeeks: PastWeekRecord[]): Promise<void> {
-  await syncPastWeeksToSupabase(pastWeeks);
+  await syncPastWeeksToFirebase(pastWeeks);
 }
+
