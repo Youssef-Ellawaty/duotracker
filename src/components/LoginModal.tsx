@@ -22,12 +22,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   );
   const [pinInput, setPinInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
-  const [selectedTrack, setSelectedTrack] = useState<TrackType>(userProfile.track || 'SCI_MATH');
+  const [selectedTrack, setSelectedTrack] = useState<TrackType>(
+    userProfile.track || (userProfile.name.toLowerCase().includes('youssef') ? 'SCI_MATH' : 'SCI_BIO')
+  );
 
   if (!isOpen) return null;
 
   const handleSelectAccount = (acc: 'EMY' | 'YOUSSEF') => {
     setSelectedAccount(acc);
+    setSelectedTrack(acc === 'EMY' ? 'SCI_BIO' : 'SCI_MATH');
     setErrorMsg('');
   };
 
@@ -44,7 +47,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     const updatedProfile: UserProfile = {
       ...preset,
       track: selectedTrack,
-      partnerTrack: selectedTrack,
+      partnerTrack: selectedAccount === 'EMY' ? 'SCI_MATH' : 'SCI_BIO',
       isLoggedIn: true,
     };
 

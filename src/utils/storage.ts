@@ -16,7 +16,7 @@ export const PRESET_USERS = {
     id: 'user_emy',
     name: 'Emy Ahmed',
     pin: '132026',
-    track: 'SCI_MATH' as const,
+    track: 'SCI_BIO' as const,
     partnerName: 'Youssef Ellawaty',
     partnerPin: '132026',
     partnerTrack: 'SCI_MATH' as const,
@@ -29,13 +29,57 @@ export const PRESET_USERS = {
     track: 'SCI_MATH' as const,
     partnerName: 'Emy Ahmed',
     partnerPin: '132026',
-    partnerTrack: 'SCI_MATH' as const,
+    partnerTrack: 'SCI_BIO' as const,
     isLoggedIn: true,
   },
 };
 
 export function weekKeyFor(name: string): string {
   return `week_${name.replace(/\s+/g, '_')}`;
+}
+
+export function syncWeeklyDataWithTrack(
+  weeklyData: WeeklyData,
+  track: 'SCI_MATH' | 'SCI_BIO'
+): WeeklyData {
+  const allowedSubjects = getSubjectsForTrack(track);
+  const existingGoalMap = new Map(
+    weeklyData.subjectGoals.map((g) => [g.subjectId, g])
+  );
+
+  const updatedSubjectGoals = allowedSubjects.map((sub) => {
+    const existing = existingGoalMap.get(sub.id);
+    if (existing) {
+      return {
+        ...existing,
+        subjectNameAr: sub.nameAr,
+        subjectNameEn: sub.nameEn,
+        iconName: sub.iconName,
+        color: sub.color,
+      };
+    }
+    return {
+      subjectId: sub.id,
+      subjectNameAr: sub.nameAr,
+      subjectNameEn: sub.nameEn,
+      targetSessions: 0,
+      completedSessions: 0,
+      iconName: sub.iconName,
+      color: sub.color,
+    };
+  });
+
+  const metrics = calculateWeeklyScore(updatedSubjectGoals);
+
+  return {
+    ...weeklyData,
+    subjectGoals: updatedSubjectGoals,
+    totalTarget: metrics.totalTarget,
+    totalCompleted: metrics.totalCompleted,
+    completionRate: metrics.completionRate,
+    bonusPoints: metrics.bonusPoints,
+    finalScore: metrics.finalScore,
+  };
 }
 
 export function createInitialWeeklyData(

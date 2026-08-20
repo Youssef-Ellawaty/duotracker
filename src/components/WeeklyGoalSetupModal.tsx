@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Target, Sparkles, Check, X, Info, Plus, Minus, BookOpen } from 'lucide-react';
 import { SubjectGoal, WeeklyData } from '../types';
@@ -19,6 +19,13 @@ export const WeeklyGoalSetupModal: React.FC<WeeklyGoalSetupModalProps> = ({
 }) => {
   const [goals, setGoals] = useState<SubjectGoal[]>(weeklyData.subjectGoals);
   const [notes, setNotes] = useState(weeklyData.notes || '');
+
+  useEffect(() => {
+    if (isOpen) {
+      setGoals(weeklyData.subjectGoals);
+      setNotes(weeklyData.notes || '');
+    }
+  }, [isOpen, weeklyData]);
 
   if (!isOpen) return null;
 

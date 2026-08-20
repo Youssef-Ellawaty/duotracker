@@ -16,6 +16,7 @@ import { PastWeekRecord, TabView, UserProfile, WeeklyData } from './types';
 import {
   PRESET_USERS,
   createInitialWeeklyData,
+  syncWeeklyDataWithTrack,
   weekKeyFor,
   fetchRemoteProfile,
   persistProfile,
@@ -85,7 +86,9 @@ export default function App() {
       }
 
       if (myWeek) {
-        setMyWeeklyData(myWeek);
+        const synced = syncWeeklyDataWithTrack(myWeek, profile.track);
+        setMyWeeklyData(synced);
+        await persistWeek(weekKeyFor(profile.name), synced);
       } else {
         const initial = createInitialWeeklyData('Current Week (1)', 1, profile.track, 0);
         setMyWeeklyData(initial);
@@ -93,7 +96,9 @@ export default function App() {
       }
 
       if (partnerWeek) {
-        setPartnerWeeklyData(partnerWeek);
+        const synced = syncWeeklyDataWithTrack(partnerWeek, profile.partnerTrack);
+        setPartnerWeeklyData(synced);
+        await persistWeek(weekKeyFor(profile.partnerName), synced);
       } else {
         const initial = createInitialWeeklyData('Current Week (1)', 1, profile.partnerTrack, 0);
         setPartnerWeeklyData(initial);
@@ -148,14 +153,14 @@ export default function App() {
     // 1. مزامنة أسبوعي لحظياً
     const unsubMyWeek = subscribeToFirebaseDoc('duotracker_weeks', myKey, (data) => {
       if (data?.week_data) {
-        setMyWeeklyData(data.week_data);
+        setMyWeeklyData(syncWeeklyDataWithTrack(data.week_data, userProfile.track));
       }
     });
 
     // 2. مزامنة أسبوع الشريك لحظياً
     const unsubPartnerWeek = subscribeToFirebaseDoc('duotracker_weeks', partnerKey, (data) => {
       if (data?.week_data) {
-        setPartnerWeeklyData(data.week_data);
+        setPartnerWeeklyData(syncWeeklyDataWithTrack(data.week_data, userProfile.partnerTrack));
       }
     });
 
@@ -178,7 +183,7 @@ export default function App() {
 
     return () => {
       unsubMyWeek();
-      unsubPartnerWeek;
+      unsubPartnerWeek();
       unsubSchedule();
       unsubHistory();
     };
