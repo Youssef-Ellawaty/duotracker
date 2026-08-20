@@ -172,3 +172,29 @@ function formatDateWithCutoff(d: Date): string {
   const mins = String(d.getMinutes()).padStart(2, '0');
   return `${day}/${month} الساعة ${hours}:${mins} فجراً`;
 }
+
+// src/utils/schedule.ts
+
+function safePeriodsArray(periods: unknown): WeekPeriod[] {
+  return Array.isArray(periods) ? (periods as WeekPeriod[]) : [];
+}
+
+export function addPeriod(config: WeekScheduleConfig, period: WeekPeriod): WeekScheduleConfig {
+  return { periods: sortPeriods([...safePeriodsArray(config.periods), period]) };
+}
+
+export function updatePeriod(
+  config: WeekScheduleConfig,
+  periodId: string,
+  updates: Partial<Omit<WeekPeriod, 'id' | 'createdBy' | 'createdAt'>>
+): WeekScheduleConfig {
+  return {
+    periods: sortPeriods(
+      safePeriodsArray(config.periods).map((p) => (p.id === periodId ? { ...p, ...updates } : p))
+    ),
+  };
+}
+
+export function removePeriod(config: WeekScheduleConfig, periodId: string): WeekScheduleConfig {
+  return { periods: safePeriodsArray(config.periods).filter((p) => p.id !== periodId) };
+}
