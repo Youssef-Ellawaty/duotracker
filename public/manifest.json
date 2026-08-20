@@ -3,9 +3,9 @@
   "name": "DuoTracker - Partner Study Goal Tracker",
   "icons": [
     {
-      "src": "/icon.jpg",
-      "type": "image/jpeg",
-      "sizes": "512x512",
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512 192x192 any",
       "purpose": "any maskable"
     }
   ],
