@@ -1,4 +1,4 @@
-const CACHE_NAME = 'duotracker-v4';
+const CACHE_NAME = 'duotracker-v5';
 const urlsToCache = ['/', '/index.html'];
 
 self.addEventListener('install', (event) => {
@@ -24,7 +24,12 @@ self.addEventListener('fetch', (event) => {
       (async () => {
         try {
           const res = await fetch(req);
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, res.clone())).catch(() => {});
+          // Clone immediately, before returning res to the browser. The browser
+          // starts consuming res's body as soon as it's returned from
+          // respondWith(), so cloning later inside a .then() callback races
+          // against that consumption and throws "body already used".
+          const resToCache = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, resToCache)).catch(() => {});
           return res;
         } catch {
           const cached = await caches.match(req);
@@ -41,7 +46,8 @@ self.addEventListener('fetch', (event) => {
       if (cached) return cached;
       const res = await fetch(req);
       try {
-        caches.open(CACHE_NAME).then((cache) => cache.put(req, res.clone())).catch(() => {});
+        const resToCache = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(req, resToCache)).catch(() => {});
       } catch {}
       return res;
     })()
