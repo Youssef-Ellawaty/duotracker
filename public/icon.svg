@@ -1,43 +1,139 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0b0f19" />
-      <stop offset="100%" stop-color="#1e1b4b" />
+    <!-- Background Gradient -->
+    <radialGradient id="bgGrad" cx="50%" cy="35%" r="70%">
+      <stop offset="0%" stop-color="#181e36" />
+      <stop offset="60%" stop-color="#0b0f19" />
+      <stop offset="100%" stop-color="#05070c" />
+    </radialGradient>
+
+    <!-- Glowing gradients for the two interlocking infinity loops / ribbons -->
+    <linearGradient id="gradEmy" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f43f5e" />
+      <stop offset="50%" stop-color="#ec4899" />
+      <stop offset="100%" stop-color="#a855f7" />
     </linearGradient>
-    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#10b981" />
-      <stop offset="50%" stop-color="#8b5cf6" />
-      <stop offset="100%" stop-color="#ec4899" />
+
+    <linearGradient id="gradYoussef" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6" />
+      <stop offset="50%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#10b981" />
     </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#8b5cf6" flood-opacity="0.4" />
+
+    <linearGradient id="coreEnergy" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="40%" stop-color="#fef08a" />
+      <stop offset="80%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#ea580c" />
+    </linearGradient>
+
+    <!-- Filters for deep glow and depth -->
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="blur1" />
+      <feGaussianBlur in="SourceGraphic" stdDeviation="35" result="blur2" />
+      <feMerge>
+        <feMergeNode in="blur2" />
+        <feMergeNode in="blur1" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <filter id="coreGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
     </filter>
   </defs>
 
-  <!-- Background with rounded corners for maskable icon -->
-  <rect width="512" height="512" rx="112" fill="url(#bg)" />
-  <rect x="16" y="16" width="480" height="480" rx="96" fill="none" stroke="url(#glow)" stroke-width="6" stroke-opacity="0.6" />
+  <!-- Base App Icon Canvas -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" />
 
-  <!-- Center Graphic: Two Intersecting Energy Shields & Trophy/Star -->
-  <g filter="url(#shadow)">
-    <!-- Shield/Ring for Emy (Pink/Violet) -->
-    <circle cx="216" cy="240" r="90" fill="#ec4899" fill-opacity="0.25" stroke="#ec4899" stroke-width="12" />
-    <!-- Shield/Ring for Youssef (Emerald/Teal) -->
-    <circle cx="296" cy="240" r="90" fill="#10b981" fill-opacity="0.25" stroke="#10b981" stroke-width="12" />
-    
-    <!-- Central Trophy / Sparkle Icon -->
-    <path d="M256 160 L266 210 L316 220 L266 230 L256 280 L246 230 L196 220 L246 210 Z" fill="#fbbf24" stroke="#f59e0b" stroke-width="4" />
-    <circle cx="256" cy="220" r="8" fill="#ffffff" />
+  <!-- Subtle Outer Accent Ring -->
+  <rect x="14" y="14" width="484" height="484" rx="114" fill="none" stroke="rgba(255, 255, 255, 0.07)" stroke-width="2" />
 
-    <!-- Duo Connection Arc -->
-    <path d="M190 320 Q256 370 322 320" fill="none" stroke="url(#glow)" stroke-width="14" stroke-linecap="round" />
+  <!-- Ambient Glow Behind Intersection -->
+  <circle cx="190" cy="256" r="100" fill="#ec4899" opacity="0.18" filter="url(#softGlow)" />
+  <circle cx="322" cy="256" r="100" fill="#10b981" opacity="0.18" filter="url(#softGlow)" />
+  <circle cx="256" cy="256" r="60" fill="#f59e0b" opacity="0.25" filter="url(#softGlow)" />
+
+  <!-- Main Dual Wings / Mobius Energy Geometry (Symbolizing Duo Synergy & Focus) -->
+  <g filter="url(#softGlow)">
+    <!-- Left Wing (Emy - Rose/Violet) -->
+    <path
+      d="M 256 120
+         C 140 120, 70 190, 70 270
+         C 70 345, 130 392, 205 392
+         C 260 392, 290 340, 256 256
+         C 225 180, 200 160, 256 120 Z"
+      fill="url(#gradEmy)"
+      opacity="0.92"
+    />
+
+    <!-- Right Wing (Youssef - Emerald/Teal/Cyan) -->
+    <path
+      d="M 256 392
+         C 372 392, 442 322, 442 242
+         C 442 167, 382 120, 307 120
+         C 252 120, 222 172, 256 256
+         C 287 332, 312 352, 256 392 Z"
+      fill="url(#gradYoussef)"
+      opacity="0.92"
+    />
   </g>
 
-  <!-- Title Text -->
-  <text x="256" y="420" text-anchor="middle" font-family="'Outfit', 'Cairo', sans-serif" font-weight="900" font-size="46" fill="#f8fafc" letter-spacing="3">
-    DUOTRACKER
-  </text>
-  <text x="256" y="455" text-anchor="middle" font-family="'Cairo', sans-serif" font-weight="700" font-size="22" fill="#34d399" letter-spacing="1">
-    EMY &amp; YOUSSEF
-  </text>
+  <!-- Inner Dynamic Stroke Overlays (Precision Craft Lines) -->
+  <!-- Emy Inner Curve Stroke -->
+  <path
+    d="M 94 265 C 94 200, 155 146, 256 146 C 220 180, 195 220, 215 275 C 225 305, 210 365, 175 365 C 125 365, 94 320, 94 265 Z"
+    fill="none"
+    stroke="rgba(255, 255, 255, 0.4)"
+    stroke-width="3"
+    stroke-linecap="round"
+  />
+
+  <!-- Youssef Inner Curve Stroke -->
+  <path
+    d="M 418 247 C 418 312, 357 366, 256 366 C 292 332, 317 292, 297 237 C 287 207, 302 147, 337 147 C 387 147, 418 192, 418 247 Z"
+    fill="none"
+    stroke="rgba(255, 255, 255, 0.4)"
+    stroke-width="3"
+    stroke-linecap="round"
+  />
+
+  <!-- Central Nexus Core: 4-Pointed Dynamic Focus Star / Diamond of Achievement -->
+  <g filter="url(#coreGlow)">
+    <!-- Back star flare -->
+    <path
+      d="M 256 176
+         Q 256 256 176 256
+         Q 256 256 256 336
+         Q 256 256 336 256
+         Q 256 256 256 176 Z"
+      fill="url(#coreEnergy)"
+    />
+
+    <!-- Diagonal Accent Star -->
+    <path
+      d="M 256 205
+         Q 256 256 205 256
+         Q 256 256 256 307
+         Q 256 256 307 256
+         Q 256 256 256 205 Z"
+      fill="#ffffff"
+      opacity="0.85"
+      transform="rotate(45 256 256)"
+    />
+
+    <!-- Diamond Heart -->
+    <circle cx="256" cy="256" r="14" fill="#ffffff" />
+    <circle cx="256" cy="256" r="7" fill="#fef08a" />
+  </g>
+
+  <!-- Delicate Focus Particle Sparks -->
+  <circle cx="140" cy="180" r="4.5" fill="#f43f5e" opacity="0.9" filter="url(#coreGlow)" />
+  <circle cx="372" cy="332" r="4.5" fill="#10b981" opacity="0.9" filter="url(#coreGlow)" />
+  <circle cx="256" cy="90" r="3" fill="#fbbf24" opacity="0.8" />
+  <circle cx="256" cy="422" r="3" fill="#06b6d4" opacity="0.8" />
 </svg>

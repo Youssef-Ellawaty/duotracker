@@ -1,4 +1,4 @@
-const CACHE_NAME = 'duotracker-v4';
+const CACHE_NAME = 'duotracker-v5';
 const urlsToCache = ['/', '/index.html'];
 
 self.addEventListener('install', (event) => {
