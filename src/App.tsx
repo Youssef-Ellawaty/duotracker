@@ -17,6 +17,7 @@ import {
   PRESET_USERS,
   createInitialWeeklyData,
   syncWeeklyDataWithTrack,
+  getTrackForName,
   weekKeyFor,
   fetchRemoteProfile,
   persistProfile,
@@ -74,6 +75,9 @@ export default function App() {
 
   async function loadAllRemoteData(profile: UserProfile) {
     try {
+      const myTrack = getTrackForName(profile.name, profile.track);
+      const partnerTrack = getTrackForName(profile.partnerName, profile.partnerTrack);
+
       const [schedule, myWeek, partnerWeek, past] = await Promise.all([
         fetchScheduleFromFirebase(),
         fetchRemoteWeek(weekKeyFor(profile.name)),
@@ -86,21 +90,21 @@ export default function App() {
       }
 
       if (myWeek) {
-        const synced = syncWeeklyDataWithTrack(myWeek, profile.track);
+        const synced = syncWeeklyDataWithTrack(myWeek, myTrack);
         setMyWeeklyData(synced);
         await persistWeek(weekKeyFor(profile.name), synced);
       } else {
-        const initial = createInitialWeeklyData('Current Week (1)', 1, profile.track, 0);
+        const initial = createInitialWeeklyData('Current Week (1)', 1, myTrack, 0);
         setMyWeeklyData(initial);
         await persistWeek(weekKeyFor(profile.name), initial);
       }
 
       if (partnerWeek) {
-        const synced = syncWeeklyDataWithTrack(partnerWeek, profile.partnerTrack);
+        const synced = syncWeeklyDataWithTrack(partnerWeek, partnerTrack);
         setPartnerWeeklyData(synced);
         await persistWeek(weekKeyFor(profile.partnerName), synced);
       } else {
-        const initial = createInitialWeeklyData('Current Week (1)', 1, profile.partnerTrack, 0);
+        const initial = createInitialWeeklyData('Current Week (1)', 1, partnerTrack, 0);
         setPartnerWeeklyData(initial);
         await persistWeek(weekKeyFor(profile.partnerName), initial);
       }
@@ -118,16 +122,30 @@ export default function App() {
   const handleLoginProfile = async (updated: UserProfile) => {
     setIsLoadingData(true);
     try {
-      const remote = (await fetchRemoteProfile(updated.id)) || updated;
-      const finalProfile: UserProfile = { ...remote, isLoggedIn: true };
+      const myTrack = getTrackForName(updated.name, updated.track);
+      const partnerTrack = getTrackForName(updated.partnerName, updated.partnerTrack);
+      const finalProfile: UserProfile = {
+        ...updated,
+        track: myTrack,
+        partnerTrack: partnerTrack,
+        isLoggedIn: true,
+      };
       setUserProfile(finalProfile);
       await persistProfile(finalProfile);
       await loadAllRemoteData(finalProfile);
     } catch (err) {
       console.error('فشل تحميل بيانات تسجيل الدخول:', err);
       // Fallback cleanly to entered profile so user is not blocked
-      setUserProfile({ ...updated, isLoggedIn: true });
-      await loadAllRemoteData(updated);
+      const myTrack = getTrackForName(updated.name, updated.track);
+      const partnerTrack = getTrackForName(updated.partnerName, updated.partnerTrack);
+      const fallback: UserProfile = {
+        ...updated,
+        track: myTrack,
+        partnerTrack: partnerTrack,
+        isLoggedIn: true,
+      };
+      setUserProfile(fallback);
+      await loadAllRemoteData(fallback);
     } finally {
       setIsLoginModalOpen(false);
       setIsLoadingData(false);
@@ -149,18 +167,20 @@ export default function App() {
 
     const myKey = weekKeyFor(userProfile.name);
     const partnerKey = weekKeyFor(userProfile.partnerName);
+    const myTrack = getTrackForName(userProfile.name, userProfile.track);
+    const partnerTrack = getTrackForName(userProfile.partnerName, userProfile.partnerTrack);
 
     // 1. مزامنة أسبوعي لحظياً
     const unsubMyWeek = subscribeToFirebaseDoc('duotracker_weeks', myKey, (data) => {
       if (data?.week_data) {
-        setMyWeeklyData(syncWeeklyDataWithTrack(data.week_data, userProfile.track));
+        setMyWeeklyData(syncWeeklyDataWithTrack(data.week_data, myTrack));
       }
     });
 
     // 2. مزامنة أسبوع الشريك لحظياً
     const unsubPartnerWeek = subscribeToFirebaseDoc('duotracker_weeks', partnerKey, (data) => {
       if (data?.week_data) {
-        setPartnerWeeklyData(syncWeeklyDataWithTrack(data.week_data, userProfile.partnerTrack));
+        setPartnerWeeklyData(syncWeeklyDataWithTrack(data.week_data, partnerTrack));
       }
     });
 

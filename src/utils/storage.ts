@@ -34,6 +34,18 @@ export const PRESET_USERS = {
   },
 };
 
+export function getTrackForName(name?: string, fallbackTrack?: 'SCI_MATH' | 'SCI_BIO'): 'SCI_MATH' | 'SCI_BIO' {
+  if (!name) return fallbackTrack || 'SCI_MATH';
+  const lower = name.toLowerCase();
+  if (lower.includes('emy') || lower.includes('إيمي') || lower.includes('ahmed') || lower.includes('bio')) {
+    return 'SCI_BIO';
+  }
+  if (lower.includes('youssef') || lower.includes('يوسف') || lower.includes('ellawaty') || lower.includes('math')) {
+    return 'SCI_MATH';
+  }
+  return fallbackTrack || 'SCI_MATH';
+}
+
 export function weekKeyFor(name: string): string {
   return `week_${name.replace(/\s+/g, '_')}`;
 }

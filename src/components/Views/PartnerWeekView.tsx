@@ -4,6 +4,7 @@ import { UserProfile, WeeklyData } from '../../types';
 import { SubjectCard } from '../SubjectCard';
 import { NotepadModule } from '../NotepadModule';
 import { calculateWeeklyScore } from '../../utils/scoreCalculator';
+import { getTrackForName } from '../../utils/storage';
 
 interface PartnerWeekViewProps {
   partnerData: WeeklyData;
@@ -18,6 +19,7 @@ export const PartnerWeekView: React.FC<PartnerWeekViewProps> = ({
 }) => {
   const partnerMetrics = calculateWeeklyScore(partnerData.subjectGoals);
   const userMetrics = calculateWeeklyScore(userWeeklyData.subjectGoals);
+  const partnerTrack = getTrackForName(userProfile.partnerName, userProfile.partnerTrack);
 
   const scoreDiff = userMetrics.finalScore - partnerMetrics.finalScore;
 
@@ -40,7 +42,7 @@ export const PartnerWeekView: React.FC<PartnerWeekViewProps> = ({
 
         <div className="px-4 py-2 rounded-xl bg-violet-500/10 border border-violet-500/30 text-violet-300 text-xs font-bold flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-violet-400" />
-          <span>Track: {userProfile.partnerTrack === 'SCI_MATH' ? 'Scientific Math' : 'Scientific Biology'}</span>
+          <span>Track: {partnerTrack === 'SCI_MATH' ? 'علمي رياضة (Math)' : 'علمي علوم (Biology)'}</span>
         </div>
       </div>
 
