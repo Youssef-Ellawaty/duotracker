@@ -78,7 +78,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ pastWeeks, userProfile
           pastWeeks.map((week) => {
             const isUser = activeSubTab === 'MY_PAST';
             const metrics = isUser ? week.userMetrics : week.partnerMetrics;
-            const isWinner = week.winnerName === metrics.userName;
+            const targetName = isUser ? week.userMetrics.userName : week.partnerMetrics.partnerName;
+            const isWinner = week.winnerName === targetName;
             const isExpanded = expandedWeekId === week.weekId;
 
             return (

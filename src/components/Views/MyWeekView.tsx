@@ -99,7 +99,7 @@ export const MyWeekView: React.FC<MyWeekViewProps> = ({
         {!hasSetGoals ? (
           <button
             onClick={onOpenSetupModal}
-            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 transition-all flex items-center justify-center gap-2 text-xs sm:text-sm font-extrabold shadow-lg shadow-emerald-500/20 cursor-pointer active:scale-95 shrink-0"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 transition-all flex items-center justify-center gap-2 text-xs sm:text-sm font-extrabold shadow-lg shadow-emerald-500/20 cursor-pointer active:scale-95 shrink-0 animate-pulse"
           >
             <Target className="w-4 h-4" />
             <span>تحديد أهداف الأسبوع (Set Goals)</span>
@@ -114,6 +114,24 @@ export const MyWeekView: React.FC<MyWeekViewProps> = ({
           </button>
         )}
       </div>
+
+      {/* Notice Banner when goals not set */}
+      {!hasSetGoals && (
+        <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-emerald-200">
+          <div className="flex items-center gap-2.5">
+            <Sparkles className="w-5 h-5 text-emerald-400 shrink-0 animate-spin" />
+            <span>
+              <strong>أسبوع جديد متاح!</strong> لم تقم بتحديد عدد الجلسات المستهدفة بعد. حدد أهدافك لتتبع تقدمك ومنافسة شريكك.
+            </span>
+          </div>
+          <button
+            onClick={onOpenSetupModal}
+            className="px-3.5 py-1.5 rounded-xl bg-emerald-500 text-slate-950 font-bold hover:bg-emerald-400 transition-colors shrink-0 cursor-pointer"
+          >
+            حدد أهدافك الآن
+          </button>
+        </div>
+      )}
 
       {/* Metric Cards Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">

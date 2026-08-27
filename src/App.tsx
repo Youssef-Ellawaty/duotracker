@@ -85,33 +85,193 @@ export default function App() {
         fetchRemotePastWeeks(),
       ]);
 
+      const validSchedule = safeSchedule(schedule);
       if (schedule) {
-        setScheduleConfig(safeSchedule(schedule));
+        setScheduleConfig(validSchedule);
       }
 
-      if (myWeek) {
-        const synced = syncWeeklyDataWithTrack(myWeek, myTrack);
-        setMyWeeklyData(synced);
-        await persistWeek(weekKeyFor(profile.name), synced);
-      } else {
-        const initial = createInitialWeeklyData('Current Week (1)', 1, myTrack, 0);
-        setMyWeeklyData(initial);
-        await persistWeek(weekKeyFor(profile.name), initial);
-      }
-
-      if (partnerWeek) {
-        const synced = syncWeeklyDataWithTrack(partnerWeek, partnerTrack);
-        setPartnerWeeklyData(synced);
-        await persistWeek(weekKeyFor(profile.partnerName), synced);
-      } else {
-        const initial = createInitialWeeklyData('Current Week (1)', 1, partnerTrack, 0);
-        setPartnerWeeklyData(initial);
-        await persistWeek(weekKeyFor(profile.partnerName), initial);
-      }
-
-      const cleanPast = (past || []).filter(
+      let cleanPast: PastWeekRecord[] = (past || []).filter(
         (rec) => rec.winnerName !== 'أحمد محمود' && rec.winnerName !== 'عمر خالد'
       );
+
+      const calculatedWeek = calculateCurrentWeekInfo(validSchedule);
+
+      if (calculatedWeek.hasActivePeriod && calculatedWeek.activePeriod) {
+        const activePeriod = calculatedWeek.activePeriod;
+        const activeOrdinal = calculatedWeek.ordinal;
+
+        const isMyWeekOnActivePeriod =
+          myWeek &&
+          (myWeek.weekId === activePeriod.id ||
+            (myWeek.weekTitle === activePeriod.name && myWeek.startDate === activePeriod.startDate));
+
+        if (myWeek && !isMyWeekOnActivePeriod) {
+          // الفترة السابقة (Week 1 مثلاً) انتهت وبدأت فترة جديدة (Week 2) — نقوم بأرشفة نتائج الأسبوع السابق أولاً دون مسحها
+          const isAlreadyArchived = cleanPast.some(
+            (rec) =>
+              rec.weekId === myWeek.weekId ||
+              (rec.startDate === myWeek.startDate && rec.endDate === myWeek.endDate) ||
+              (myWeek.weekTitle && rec.weekTitle && rec.weekTitle.includes(myWeek.weekTitle))
+          );
+
+          if (!isAlreadyArchived) {
+            const myMetrics = calculateWeeklyScore(myWeek.subjectGoals || []);
+            const partnerMetrics = calculateWeeklyScore(partnerWeek?.subjectGoals || []);
+
+            let winnerName = profile.name;
+            let winnerScore = myMetrics.finalScore;
+            let isTie = false;
+
+            if (partnerMetrics.finalScore > myMetrics.finalScore) {
+              winnerName = profile.partnerName;
+              winnerScore = partnerMetrics.finalScore;
+            } else if (partnerMetrics.finalScore === myMetrics.finalScore) {
+              isTie = true;
+            }
+
+            const newArchiveRecord: PastWeekRecord = {
+              weekId: myWeek.weekId || `week-archive-${myWeek.weekNumber || 1}-${Date.now()}`,
+              weekTitle: myWeek.weekTitle ? `${myWeek.weekTitle} - Final Result` : `Week ${myWeek.weekNumber || 1} - Final Result`,
+              startDate: myWeek.startDate || activePeriod.startDate,
+              endDate: myWeek.endDate || activePeriod.endDate,
+              userMetrics: {
+                userName: profile.name,
+                totalTarget: myMetrics.totalTarget,
+                totalCompleted: myMetrics.totalCompleted,
+                completionRate: myMetrics.completionRate,
+                bonusPoints: myMetrics.bonusPoints,
+                finalScore: myMetrics.finalScore,
+                notes: myWeek.notes || '',
+                subjectGoals: myWeek.subjectGoals || [],
+              },
+              partnerMetrics: {
+                partnerName: profile.partnerName,
+                totalTarget: partnerMetrics.totalTarget,
+                totalCompleted: partnerMetrics.totalCompleted,
+                completionRate: partnerMetrics.completionRate,
+                bonusPoints: partnerMetrics.bonusPoints,
+                finalScore: partnerMetrics.finalScore,
+                notes: partnerWeek?.notes || '',
+                subjectGoals: partnerWeek?.subjectGoals || [],
+              },
+              winnerName,
+              winnerScore,
+              isTie,
+              completedAt: new Date().toISOString().split('T')[0],
+            };
+
+            cleanPast = [newArchiveRecord, ...cleanPast];
+            await persistPastWeeks(cleanPast);
+          }
+
+          // بدء الأسبوع الجديد للفترة النشطة (Week 2) لكلا الشريكين
+          const freshMyWeek: WeeklyData = {
+            ...createInitialWeeklyData(activePeriod.name, activeOrdinal, myTrack, 0),
+            weekId: activePeriod.id,
+            weekNumber: activeOrdinal,
+            weekTitle: activePeriod.name,
+            startDate: activePeriod.startDate,
+            endDate: activePeriod.endDate,
+            status: 'ACTIVE',
+          };
+
+          const freshPartnerWeek: WeeklyData = {
+            ...createInitialWeeklyData(activePeriod.name, activeOrdinal, partnerTrack, 0),
+            weekId: activePeriod.id,
+            weekNumber: activeOrdinal,
+            weekTitle: activePeriod.name,
+            startDate: activePeriod.startDate,
+            endDate: activePeriod.endDate,
+            status: 'ACTIVE',
+          };
+
+          setMyWeeklyData(freshMyWeek);
+          setPartnerWeeklyData(freshPartnerWeek);
+          await persistWeek(weekKeyFor(profile.name), freshMyWeek);
+          await persistWeek(weekKeyFor(profile.partnerName), freshPartnerWeek);
+
+          // فتح نافذة تحديد الأهداف فوراً للأسبوع الجديد
+          setIsSetupModalOpen(true);
+        } else if (myWeek && isMyWeekOnActivePeriod) {
+          const syncedMy = syncWeeklyDataWithTrack(myWeek, myTrack);
+          setMyWeeklyData(syncedMy);
+          await persistWeek(weekKeyFor(profile.name), syncedMy);
+
+          if (partnerWeek) {
+            const syncedPartner = syncWeeklyDataWithTrack(partnerWeek, partnerTrack);
+            setPartnerWeeklyData(syncedPartner);
+            await persistWeek(weekKeyFor(profile.partnerName), syncedPartner);
+          } else {
+            const freshPartner = {
+              ...createInitialWeeklyData(activePeriod.name, activeOrdinal, partnerTrack, 0),
+              weekId: activePeriod.id,
+              weekNumber: activeOrdinal,
+              weekTitle: activePeriod.name,
+              startDate: activePeriod.startDate,
+              endDate: activePeriod.endDate,
+            };
+            setPartnerWeeklyData(freshPartner);
+            await persistWeek(weekKeyFor(profile.partnerName), freshPartner);
+          }
+
+          if (syncedMy.totalTarget === 0 && syncedMy.totalCompleted === 0) {
+            setIsSetupModalOpen(true);
+          }
+        } else {
+          // لم تكن هناك بيانات، ننشئ أسبوع جديد مرتبط بالفترة النشطة
+          const freshMyWeek: WeeklyData = {
+            ...createInitialWeeklyData(activePeriod.name, activeOrdinal, myTrack, 0),
+            weekId: activePeriod.id,
+            weekNumber: activeOrdinal,
+            weekTitle: activePeriod.name,
+            startDate: activePeriod.startDate,
+            endDate: activePeriod.endDate,
+            status: 'ACTIVE',
+          };
+
+          const freshPartnerWeek: WeeklyData = {
+            ...createInitialWeeklyData(activePeriod.name, activeOrdinal, partnerTrack, 0),
+            weekId: activePeriod.id,
+            weekNumber: activeOrdinal,
+            weekTitle: activePeriod.name,
+            startDate: activePeriod.startDate,
+            endDate: activePeriod.endDate,
+            status: 'ACTIVE',
+          };
+
+          setMyWeeklyData(freshMyWeek);
+          setPartnerWeeklyData(freshPartnerWeek);
+          await persistWeek(weekKeyFor(profile.name), freshMyWeek);
+          await persistWeek(weekKeyFor(profile.partnerName), freshPartnerWeek);
+          setIsSetupModalOpen(true);
+        }
+      } else {
+        // لا توجد فترات نشطة مجدولة حالياً
+        if (myWeek) {
+          const synced = syncWeeklyDataWithTrack(myWeek, myTrack);
+          setMyWeeklyData(synced);
+          await persistWeek(weekKeyFor(profile.name), synced);
+          if (synced.totalTarget === 0 && synced.totalCompleted === 0) {
+            setIsSetupModalOpen(true);
+          }
+        } else {
+          const initial = createInitialWeeklyData('Current Week (1)', 1, myTrack, 0);
+          setMyWeeklyData(initial);
+          await persistWeek(weekKeyFor(profile.name), initial);
+          setIsSetupModalOpen(true);
+        }
+
+        if (partnerWeek) {
+          const synced = syncWeeklyDataWithTrack(partnerWeek, partnerTrack);
+          setPartnerWeeklyData(synced);
+          await persistWeek(weekKeyFor(profile.partnerName), synced);
+        } else {
+          const initial = createInitialWeeklyData('Current Week (1)', 1, partnerTrack, 0);
+          setPartnerWeeklyData(initial);
+          await persistWeek(weekKeyFor(profile.partnerName), initial);
+        }
+      }
+
       setPastWeeks(cleanPast);
     } catch (e) {
       console.error('Error loading remote data:', e);
@@ -314,11 +474,14 @@ export default function App() {
     setPastWeeks(updatedPast);
     await persistPastWeeks(updatedPast);
 
-    const newMyWeek = createInitialWeeklyData(`Current Week (${nextWeekNumber})`, nextWeekNumber, userProfile.track, 0);
+    const myTrack = getTrackForName(userProfile.name, userProfile.track);
+    const partnerTrack = getTrackForName(userProfile.partnerName, userProfile.partnerTrack);
+
+    const newMyWeek = createInitialWeeklyData(`Current Week (${nextWeekNumber})`, nextWeekNumber, myTrack, 0);
     const newPartnerWeek = createInitialWeeklyData(
       `Current Week (${nextWeekNumber})`,
       nextWeekNumber,
-      userProfile.partnerTrack,
+      partnerTrack,
       0
     );
 
@@ -334,7 +497,7 @@ export default function App() {
       colors: ['#f59e0b', '#10b981', '#8b5cf6', '#ec4899'],
     });
 
-    setActiveTab('HALL_OF_FAME');
+    setIsSetupModalOpen(true);
   };
 
   // ----- إدارة فترات الأسبوع (يوسف فقط) -----
