@@ -333,10 +333,49 @@ export async function fetchProfileFromFirebase(profileIdOrName: string): Promise
 }
 
 /**
+ * Syncs backlog sessions data to Firestore
+ */
+export async function syncBacklogToFirebase(backlogKey: string, backlogData: any): Promise<void> {
+  const db = getFirebaseDb();
+  if (!db) return;
+
+  try {
+    const docRef = doc(db, 'duotracker_backlog', backlogKey);
+    await setDoc(docRef, {
+      id: backlogKey,
+      backlog_data: backlogData,
+      updated_at: new Date().toISOString(),
+    }, { merge: true });
+  } catch (err) {
+    console.error(`Firebase sync backlog (${backlogKey}) failed:`, err);
+  }
+}
+
+/**
+ * Fetches backlog sessions data from Firestore
+ */
+export async function fetchBacklogFromFirebase(backlogKey: string): Promise<any | null> {
+  const db = getFirebaseDb();
+  if (!db) return null;
+
+  try {
+    const docRef = doc(db, 'duotracker_backlog', backlogKey);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return null;
+
+    const data = snap.data();
+    return data?.backlog_data || null;
+  } catch (err) {
+    console.warn(`Firebase fetch backlog (${backlogKey}) failed:`, err);
+    return null;
+  }
+}
+
+/**
  * Real-time Document Listener via Firestore onSnapshot
  */
 export function subscribeToFirebaseDoc(
-  collectionName: 'duotracker_weeks' | 'duotracker_history' | 'duotracker_profiles',
+  collectionName: 'duotracker_weeks' | 'duotracker_history' | 'duotracker_profiles' | 'duotracker_backlog',
   docId: string,
   onData: (data: any) => void
 ): Unsubscribe {

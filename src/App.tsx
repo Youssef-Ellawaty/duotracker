@@ -9,22 +9,28 @@ import { MyWeekView } from './components/Views/MyWeekView';
 import { PartnerWeekView } from './components/Views/PartnerWeekView';
 import { HistoryView } from './components/Views/HistoryView';
 import { HallOfFameView } from './components/Views/HallOfFameView';
+import { BacklogView } from './components/Views/BacklogView';
 import { LoginModal } from './components/LoginModal';
 import { WeeklyGoalSetupModal } from './components/WeeklyGoalSetupModal';
 import { FirebaseConfigModal } from './components/FirebaseConfigModal';
-import { PastWeekRecord, TabView, UserProfile, WeeklyData } from './types';
+import { PastWeekRecord, TabView, UserBacklogData, UserProfile, WeeklyData } from './types';
 import {
   PRESET_USERS,
   createInitialWeeklyData,
   syncWeeklyDataWithTrack,
+  createInitialBacklogData,
+  syncBacklogWithTrack,
   getTrackForName,
   weekKeyFor,
+  backlogKeyFor,
   fetchRemoteProfile,
   persistProfile,
   fetchRemoteWeek,
   persistWeek,
   fetchRemotePastWeeks,
   persistPastWeeks,
+  fetchRemoteBacklog,
+  persistBacklog,
 } from './utils/storage';
 import { calculateWeeklyScore } from './utils/scoreCalculator';
 import confetti from 'canvas-confetti';
@@ -59,6 +65,8 @@ export default function App() {
   const [scheduleConfig, setScheduleConfig] = useState<WeekScheduleConfig>(EMPTY_SCHEDULE_CONFIG);
   const [myWeeklyData, setMyWeeklyData] = useState<WeeklyData | null>(null);
   const [partnerWeeklyData, setPartnerWeeklyData] = useState<WeeklyData | null>(null);
+  const [myBacklogData, setMyBacklogData] = useState<UserBacklogData | null>(null);
+  const [partnerBacklogData, setPartnerBacklogData] = useState<UserBacklogData | null>(null);
   const [pastWeeks, setPastWeeks] = useState<PastWeekRecord[]>([]);
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(true);
@@ -78,12 +86,35 @@ export default function App() {
       const myTrack = getTrackForName(profile.name, profile.track);
       const partnerTrack = getTrackForName(profile.partnerName, profile.partnerTrack);
 
-      const [schedule, myWeek, partnerWeek, past] = await Promise.all([
+      const [schedule, myWeek, partnerWeek, past, myBacklog, partnerBacklog] = await Promise.all([
         fetchScheduleFromFirebase(),
         fetchRemoteWeek(weekKeyFor(profile.name)),
         fetchRemoteWeek(weekKeyFor(profile.partnerName)),
         fetchRemotePastWeeks(),
+        fetchRemoteBacklog(profile.name),
+        fetchRemoteBacklog(profile.partnerName),
       ]);
+
+      // مزامنة وتهيئة المتراكمات
+      if (myBacklog) {
+        const syncedMyBacklog = syncBacklogWithTrack(myBacklog, myTrack);
+        setMyBacklogData(syncedMyBacklog);
+        await persistBacklog(profile.name, syncedMyBacklog);
+      } else {
+        const initialMyBacklog = createInitialBacklogData(profile.name, myTrack);
+        setMyBacklogData(initialMyBacklog);
+        await persistBacklog(profile.name, initialMyBacklog);
+      }
+
+      if (partnerBacklog) {
+        const syncedPartnerBacklog = syncBacklogWithTrack(partnerBacklog, partnerTrack);
+        setPartnerBacklogData(syncedPartnerBacklog);
+        await persistBacklog(profile.partnerName, syncedPartnerBacklog);
+      } else {
+        const initialPartnerBacklog = createInitialBacklogData(profile.partnerName, partnerTrack);
+        setPartnerBacklogData(initialPartnerBacklog);
+        await persistBacklog(profile.partnerName, initialPartnerBacklog);
+      }
 
       const validSchedule = safeSchedule(schedule);
       if (schedule) {
@@ -316,6 +347,8 @@ export default function App() {
     setUserProfile(null);
     setMyWeeklyData(null);
     setPartnerWeeklyData(null);
+    setMyBacklogData(null);
+    setPartnerBacklogData(null);
     setPastWeeks([]);
     setScheduleConfig(EMPTY_SCHEDULE_CONFIG);
     setIsLoginModalOpen(true);
@@ -327,6 +360,8 @@ export default function App() {
 
     const myKey = weekKeyFor(userProfile.name);
     const partnerKey = weekKeyFor(userProfile.partnerName);
+    const myBacklogKey = backlogKeyFor(userProfile.name);
+    const partnerBacklogKey = backlogKeyFor(userProfile.partnerName);
     const myTrack = getTrackForName(userProfile.name, userProfile.track);
     const partnerTrack = getTrackForName(userProfile.partnerName, userProfile.partnerTrack);
 
@@ -361,11 +396,27 @@ export default function App() {
       }
     });
 
+    // 5. مزامنة متراكماتي لحظياً
+    const unsubMyBacklog = subscribeToFirebaseDoc('duotracker_backlog', myBacklogKey, (data) => {
+      if (data?.backlog_data) {
+        setMyBacklogData(syncBacklogWithTrack(data.backlog_data, myTrack));
+      }
+    });
+
+    // 6. مزامنة متراكمات الشريك لحظياً
+    const unsubPartnerBacklog = subscribeToFirebaseDoc('duotracker_backlog', partnerBacklogKey, (data) => {
+      if (data?.backlog_data) {
+        setPartnerBacklogData(syncBacklogWithTrack(data.backlog_data, partnerTrack));
+      }
+    });
+
     return () => {
       unsubMyWeek();
       unsubPartnerWeek();
       unsubSchedule();
       unsubHistory();
+      unsubMyBacklog();
+      unsubPartnerBacklog();
     };
   }, [userProfile]);
 
@@ -376,6 +427,13 @@ export default function App() {
     setMyWeeklyData(data);
     const saved = await persistWeek(weekKeyFor(userProfile.name), data);
     setMyWeeklyData(saved);
+  };
+
+  const handleUpdateMyBacklog = async (data: UserBacklogData) => {
+    if (!userProfile) return;
+    setMyBacklogData(data);
+    const saved = await persistBacklog(userProfile.name, data);
+    setMyBacklogData(saved);
   };
 
   const handleSwitchProfile = async () => {
@@ -549,12 +607,18 @@ export default function App() {
     );
   }
 
+  const myBacklogPendingCount = (myBacklogData?.items || []).reduce(
+    (acc, item) => acc + (item.pendingCount || 0),
+    0
+  );
+
   return (
     <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col font-['Cairo',sans-serif] pb-2 sm:pb-4">
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         userProfile={userProfile}
+        backlogCount={myBacklogPendingCount}
         onOpenLoginModal={() => setIsLoginModalOpen(true)}
         onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
         onSwitchProfile={handleSwitchProfile}
@@ -600,6 +664,14 @@ export default function App() {
 
         {activeTab === 'HISTORY' && <HistoryView pastWeeks={pastWeeks} userProfile={userProfile} />}
         {activeTab === 'HALL_OF_FAME' && <HallOfFameView pastWeeks={pastWeeks} userProfile={userProfile} />}
+        {activeTab === 'BACKLOG' && myBacklogData && partnerBacklogData && (
+          <BacklogView
+            myBacklog={myBacklogData}
+            partnerBacklog={partnerBacklogData}
+            userProfile={userProfile}
+            onUpdateMyBacklog={handleUpdateMyBacklog}
+          />
+        )}
       </main>
 
       <footer

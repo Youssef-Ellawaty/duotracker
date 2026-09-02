@@ -1,13 +1,15 @@
-import { PastWeekRecord, UserProfile, WeeklyData } from '../types';
+import { PastWeekRecord, UserBacklogData, UserProfile, WeeklyData } from '../types';
 import { getSubjectsForTrack } from '../data/tracks';
 import { calculateWeeklyScore } from './scoreCalculator';
 import {
   syncPastWeeksToFirebase,
   syncProfileToFirebase,
   syncWeekToFirebase,
+  syncBacklogToFirebase,
   fetchPastWeeksFromFirebase,
   fetchWeekFromFirebase,
   fetchProfileFromFirebase,
+  fetchBacklogFromFirebase,
 } from './firebaseClient';
 
 // حسابان فقط مسموح بهما في التطبيق بالكامل
@@ -48,6 +50,74 @@ export function getTrackForName(name?: string, fallbackTrack?: 'SCI_MATH' | 'SCI
 
 export function weekKeyFor(name: string): string {
   return `week_${name.replace(/\s+/g, '_')}`;
+}
+
+export function backlogKeyFor(name: string): string {
+  return `backlog_${name.replace(/\s+/g, '_')}`;
+}
+
+export function createInitialBacklogData(
+  userName: string,
+  track: 'SCI_MATH' | 'SCI_BIO'
+): UserBacklogData {
+  const subjects = getSubjectsForTrack(track);
+  return {
+    userId: userName.toLowerCase().includes('emy') ? 'user_emy' : 'user_youssef',
+    userName,
+    track,
+    lastUpdated: new Date().toISOString(),
+    items: subjects.map((sub) => ({
+      subjectId: sub.id,
+      subjectNameAr: sub.nameAr,
+      subjectNameEn: sub.nameEn,
+      pendingCount: 0,
+      clearedCount: 0,
+      notes: '',
+      iconName: sub.iconName,
+      color: sub.color,
+    })),
+  };
+}
+
+export function syncBacklogWithTrack(
+  backlog: UserBacklogData,
+  track: 'SCI_MATH' | 'SCI_BIO'
+): UserBacklogData {
+  const allowedSubjects = getSubjectsForTrack(track);
+  const existingMap = new Map((backlog.items || []).map((i) => [i.subjectId, i]));
+
+  const updatedItems = allowedSubjects.map((sub) => {
+    const existing = existingMap.get(sub.id);
+    if (existing) {
+      return {
+        ...existing,
+        subjectNameAr: sub.nameAr,
+        subjectNameEn: sub.nameEn,
+        iconName: sub.iconName,
+        color: sub.color,
+        pendingCount: Math.max(0, existing.pendingCount || 0),
+        clearedCount: Math.max(0, existing.clearedCount || 0),
+        notes: existing.notes || '',
+      };
+    }
+    return {
+      subjectId: sub.id,
+      subjectNameAr: sub.nameAr,
+      subjectNameEn: sub.nameEn,
+      pendingCount: 0,
+      clearedCount: 0,
+      notes: '',
+      iconName: sub.iconName,
+      color: sub.color,
+    };
+  });
+
+  return {
+    ...backlog,
+    track,
+    lastUpdated: new Date().toISOString(),
+    items: updatedItems,
+  };
 }
 
 export function syncWeeklyDataWithTrack(
@@ -168,5 +238,20 @@ export async function fetchRemotePastWeeks(): Promise<PastWeekRecord[] | null> {
 
 export async function persistPastWeeks(pastWeeks: PastWeekRecord[]): Promise<void> {
   await syncPastWeeksToFirebase(pastWeeks);
+}
+
+export async function fetchRemoteBacklog(name: string): Promise<UserBacklogData | null> {
+  const key = backlogKeyFor(name);
+  return fetchBacklogFromFirebase(key);
+}
+
+export async function persistBacklog(name: string, data: UserBacklogData): Promise<UserBacklogData> {
+  const key = backlogKeyFor(name);
+  const updated: UserBacklogData = {
+    ...data,
+    lastUpdated: new Date().toISOString(),
+  };
+  await syncBacklogToFirebase(key, updated);
+  return updated;
 }
 

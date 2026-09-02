@@ -70,7 +70,26 @@ export interface PastWeekRecord {
   completedAt: string;
 }
 
-export type TabView = 'MY_WEEK' | 'PARTNER_WEEK' | 'HISTORY' | 'HALL_OF_FAME';
+export type TabView = 'MY_WEEK' | 'PARTNER_WEEK' | 'HISTORY' | 'HALL_OF_FAME' | 'BACKLOG';
+
+export interface SubjectBacklogItem {
+  subjectId: string;
+  subjectNameAr: string;
+  subjectNameEn: string;
+  pendingCount: number; // عدد السيشنات المتراكمة
+  clearedCount: number; // عدد السيشنات التي تمت تصفيتها
+  notes: string; // أسماء الدروس أو الفصول المتراكمة
+  iconName: string;
+  color: string;
+}
+
+export interface UserBacklogData {
+  userId: string;
+  userName: string;
+  track: TrackType;
+  lastUpdated: string;
+  items: SubjectBacklogItem[];
+}
 
 export interface SubjectDef {
   id: string;

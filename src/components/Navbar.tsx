@@ -5,6 +5,7 @@ import {
   Users,
   Archive,
   Trophy,
+  Layers,
   RotateCcw,
   Sparkles,
   Zap,
@@ -17,6 +18,7 @@ interface NavbarProps {
   activeTab: TabView;
   setActiveTab: (tab: TabView) => void;
   userProfile: UserProfile;
+  backlogCount?: number;
   onOpenLoginModal: () => void;
   onOpenFirebaseModal?: () => void;
   onSwitchProfile: () => void;
@@ -28,6 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
   userProfile,
+  backlogCount = 0,
   onOpenLoginModal,
   onOpenFirebaseModal,
   onSwitchProfile,
@@ -37,31 +40,39 @@ export const Navbar: React.FC<NavbarProps> = ({
   const tabs = [
     {
       id: 'MY_WEEK' as TabView,
-      labelAr: 'My Week',
+      labelAr: 'أسبوعي',
       labelEn: 'My Week',
       icon: CalendarDays,
       badgeColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
     },
     {
       id: 'PARTNER_WEEK' as TabView,
-      labelAr: "Partner's Week",
+      labelAr: 'الشريك',
       labelEn: "Partner's Week",
       icon: Users,
       badgeColor: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
     },
     {
       id: 'HISTORY' as TabView,
-      labelAr: 'History & Archives',
-      labelEn: 'History & Archives',
+      labelAr: 'السجل',
+      labelEn: 'History',
       icon: Archive,
       badgeColor: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
     },
     {
       id: 'HALL_OF_FAME' as TabView,
-      labelAr: 'Hall of Fame',
+      labelAr: 'الأبطال',
       labelEn: 'Hall of Fame',
       icon: Trophy,
       badgeColor: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+    },
+    {
+      id: 'BACKLOG' as TabView,
+      labelAr: 'المتراكمات',
+      labelEn: 'Backlog',
+      icon: Layers,
+      badgeColor: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+      count: backlogCount,
     },
   ];
 
@@ -114,6 +125,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span className="relative z-10 flex items-center gap-2">
                     <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
                     <span>{tab.labelEn}</span>
+                    {tab.count !== undefined && tab.count > 0 && (
+                      <span className="px-1.5 py-0.2 text-[10px] font-extrabold rounded-full bg-amber-500 text-slate-950">
+                        {tab.count}
+                      </span>
+                    )}
                   </span>
                 </button>
               );
@@ -173,8 +189,8 @@ export const Navbar: React.FC<NavbarProps> = ({
       </header>
 
       {/* Mobile Bottom Navigation Bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 glass-panel border-t border-slate-800/90 px-2 py-2">
-        <div className="grid grid-cols-4 gap-1 max-w-md mx-auto">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 glass-panel border-t border-slate-800/90 px-1.5 py-1.5">
+        <div className="grid grid-cols-5 gap-1 max-w-md mx-auto">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -183,14 +199,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition-all ${
+                className={`relative flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition-all ${
                   isActive
                     ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <Icon className={`w-5 h-5 mb-1 ${isActive ? 'text-emerald-400 scale-110' : 'text-slate-400'}`} />
-                <span className="text-[11px] font-semibold text-center leading-tight truncate w-full">
+                {tab.count !== undefined && tab.count > 0 && (
+                  <span className="absolute top-1 right-1 sm:right-2 w-4 h-4 text-[9px] font-black rounded-full bg-amber-500 text-slate-950 flex items-center justify-center shadow-sm">
+                    {tab.count}
+                  </span>
+                )}
+                <Icon className={`w-4 h-4 sm:w-5 sm:h-5 mb-0.5 ${isActive ? 'text-emerald-400 scale-110' : 'text-slate-400'}`} />
+                <span className="text-[10px] font-semibold text-center leading-tight truncate w-full">
                   {tab.labelAr}
                 </span>
               </button>
