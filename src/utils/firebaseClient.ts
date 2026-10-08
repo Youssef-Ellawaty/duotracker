@@ -372,10 +372,49 @@ export async function fetchBacklogFromFirebase(backlogKey: string): Promise<any 
 }
 
 /**
+ * Syncs URT tracker tables to Firestore
+ */
+export async function syncUrtToFirebase(urtKey: string, urtData: any): Promise<void> {
+  const db = getFirebaseDb();
+  if (!db) return;
+
+  try {
+    const docRef = doc(db, 'duotracker_urt', urtKey);
+    await setDoc(docRef, {
+      id: urtKey,
+      urt_data: urtData,
+      updated_at: new Date().toISOString(),
+    }, { merge: true });
+  } catch (err) {
+    console.error(`Firebase sync URT (${urtKey}) failed:`, err);
+  }
+}
+
+/**
+ * Fetches URT tracker tables from Firestore
+ */
+export async function fetchUrtFromFirebase(urtKey: string): Promise<any | null> {
+  const db = getFirebaseDb();
+  if (!db) return null;
+
+  try {
+    const docRef = doc(db, 'duotracker_urt', urtKey);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return null;
+
+    const data = snap.data();
+    return data?.urt_data || null;
+  } catch (err) {
+    console.warn(`Firebase fetch URT (${urtKey}) failed:`, err);
+    return null;
+  }
+}
+
+/**
  * Real-time Document Listener via Firestore onSnapshot
  */
 export function subscribeToFirebaseDoc(
-  collectionName: 'duotracker_weeks' | 'duotracker_history' | 'duotracker_profiles' | 'duotracker_backlog',
+  collectionName: 'duotracker_weeks' | 'duotracker_history' | 'duotracker_profiles' | 'duotracker_backlog' | 'duotracker_urt',
   docId: string,
   onData: (data: any) => void
 ): Unsubscribe {

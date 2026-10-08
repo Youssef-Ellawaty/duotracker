@@ -10,19 +10,23 @@ import { PartnerWeekView } from './components/Views/PartnerWeekView';
 import { HistoryView } from './components/Views/HistoryView';
 import { HallOfFameView } from './components/Views/HallOfFameView';
 import { BacklogView } from './components/Views/BacklogView';
+import { UrtTrackerView } from './components/Views/UrtTrackerView';
 import { LoginModal } from './components/LoginModal';
 import { WeeklyGoalSetupModal } from './components/WeeklyGoalSetupModal';
 import { FirebaseConfigModal } from './components/FirebaseConfigModal';
-import { PastWeekRecord, TabView, UserBacklogData, UserProfile, WeeklyData } from './types';
+import { PastWeekRecord, TabView, UserBacklogData, UserProfile, UserUrtTrackerData, WeeklyData } from './types';
 import {
   PRESET_USERS,
   createInitialWeeklyData,
   syncWeeklyDataWithTrack,
   createInitialBacklogData,
   syncBacklogWithTrack,
+  createInitialUrtData,
+  syncUrtWithTrack,
   getTrackForName,
   weekKeyFor,
   backlogKeyFor,
+  urtKeyFor,
   fetchRemoteProfile,
   persistProfile,
   fetchRemoteWeek,
@@ -31,6 +35,8 @@ import {
   persistPastWeeks,
   fetchRemoteBacklog,
   persistBacklog,
+  fetchRemoteUrt,
+  persistUrt,
 } from './utils/storage';
 import { calculateWeeklyScore } from './utils/scoreCalculator';
 import confetti from 'canvas-confetti';
@@ -67,6 +73,8 @@ export default function App() {
   const [partnerWeeklyData, setPartnerWeeklyData] = useState<WeeklyData | null>(null);
   const [myBacklogData, setMyBacklogData] = useState<UserBacklogData | null>(null);
   const [partnerBacklogData, setPartnerBacklogData] = useState<UserBacklogData | null>(null);
+  const [myUrtData, setMyUrtData] = useState<UserUrtTrackerData | null>(null);
+  const [partnerUrtData, setPartnerUrtData] = useState<UserUrtTrackerData | null>(null);
   const [pastWeeks, setPastWeeks] = useState<PastWeekRecord[]>([]);
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(true);
@@ -86,13 +94,15 @@ export default function App() {
       const myTrack = getTrackForName(profile.name, profile.track);
       const partnerTrack = getTrackForName(profile.partnerName, profile.partnerTrack);
 
-      const [schedule, myWeek, partnerWeek, past, myBacklog, partnerBacklog] = await Promise.all([
+      const [schedule, myWeek, partnerWeek, past, myBacklog, partnerBacklog, myUrt, partnerUrt] = await Promise.all([
         fetchScheduleFromFirebase(),
         fetchRemoteWeek(weekKeyFor(profile.name)),
         fetchRemoteWeek(weekKeyFor(profile.partnerName)),
         fetchRemotePastWeeks(),
         fetchRemoteBacklog(profile.name),
         fetchRemoteBacklog(profile.partnerName),
+        fetchRemoteUrt(profile.name),
+        fetchRemoteUrt(profile.partnerName),
       ]);
 
       // مزامنة وتهيئة المتراكمات
@@ -114,6 +124,27 @@ export default function App() {
         const initialPartnerBacklog = createInitialBacklogData(profile.partnerName, partnerTrack);
         setPartnerBacklogData(initialPartnerBacklog);
         await persistBacklog(profile.partnerName, initialPartnerBacklog);
+      }
+
+      // مزامنة وتهيئة جداول URT Tracker
+      if (myUrt) {
+        const syncedMyUrt = syncUrtWithTrack(myUrt, myTrack);
+        setMyUrtData(syncedMyUrt);
+        await persistUrt(profile.name, syncedMyUrt);
+      } else {
+        const initialMyUrt = createInitialUrtData(profile.name, myTrack);
+        setMyUrtData(initialMyUrt);
+        await persistUrt(profile.name, initialMyUrt);
+      }
+
+      if (partnerUrt) {
+        const syncedPartnerUrt = syncUrtWithTrack(partnerUrt, partnerTrack);
+        setPartnerUrtData(syncedPartnerUrt);
+        await persistUrt(profile.partnerName, syncedPartnerUrt);
+      } else {
+        const initialPartnerUrt = createInitialUrtData(profile.partnerName, partnerTrack);
+        setPartnerUrtData(initialPartnerUrt);
+        await persistUrt(profile.partnerName, initialPartnerUrt);
       }
 
       const validSchedule = safeSchedule(schedule);
@@ -349,6 +380,8 @@ export default function App() {
     setPartnerWeeklyData(null);
     setMyBacklogData(null);
     setPartnerBacklogData(null);
+    setMyUrtData(null);
+    setPartnerUrtData(null);
     setPastWeeks([]);
     setScheduleConfig(EMPTY_SCHEDULE_CONFIG);
     setIsLoginModalOpen(true);
@@ -362,6 +395,8 @@ export default function App() {
     const partnerKey = weekKeyFor(userProfile.partnerName);
     const myBacklogKey = backlogKeyFor(userProfile.name);
     const partnerBacklogKey = backlogKeyFor(userProfile.partnerName);
+    const myUrtKey = urtKeyFor(userProfile.name);
+    const partnerUrtKey = urtKeyFor(userProfile.partnerName);
     const myTrack = getTrackForName(userProfile.name, userProfile.track);
     const partnerTrack = getTrackForName(userProfile.partnerName, userProfile.partnerTrack);
 
@@ -410,6 +445,20 @@ export default function App() {
       }
     });
 
+    // 7. مزامنة URT Tracker لجداولي لحظياً
+    const unsubMyUrt = subscribeToFirebaseDoc('duotracker_urt', myUrtKey, (data) => {
+      if (data?.urt_data) {
+        setMyUrtData(syncUrtWithTrack(data.urt_data, myTrack));
+      }
+    });
+
+    // 8. مزامنة URT Tracker لجداول الشريك لحظياً
+    const unsubPartnerUrt = subscribeToFirebaseDoc('duotracker_urt', partnerUrtKey, (data) => {
+      if (data?.urt_data) {
+        setPartnerUrtData(syncUrtWithTrack(data.urt_data, partnerTrack));
+      }
+    });
+
     return () => {
       unsubMyWeek();
       unsubPartnerWeek();
@@ -417,6 +466,8 @@ export default function App() {
       unsubHistory();
       unsubMyBacklog();
       unsubPartnerBacklog();
+      unsubMyUrt();
+      unsubPartnerUrt();
     };
   }, [userProfile]);
 
@@ -434,6 +485,13 @@ export default function App() {
     setMyBacklogData(data);
     const saved = await persistBacklog(userProfile.name, data);
     setMyBacklogData(saved);
+  };
+
+  const handleUpdateMyUrt = async (data: UserUrtTrackerData) => {
+    if (!userProfile) return;
+    setMyUrtData(data);
+    const saved = await persistUrt(userProfile.name, data);
+    setMyUrtData(saved);
   };
 
   const handleSwitchProfile = async () => {
@@ -670,6 +728,14 @@ export default function App() {
             partnerBacklog={partnerBacklogData}
             userProfile={userProfile}
             onUpdateMyBacklog={handleUpdateMyBacklog}
+          />
+        )}
+        {activeTab === 'URT_TRACKER' && myUrtData && partnerUrtData && (
+          <UrtTrackerView
+            myUrt={myUrtData}
+            partnerUrt={partnerUrtData}
+            userProfile={userProfile}
+            onUpdateMyUrt={handleUpdateMyUrt}
           />
         )}
       </main>

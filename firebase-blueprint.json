@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with track, partner link, and authentication PIN",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "pin": { "type": "string" },
+        "track": { "type": "string", "enum": ["SCI_MATH", "SCI_BIO"] },
+        "partner_name": { "type": "string" },
+        "partner_pin": { "type": "string" },
+        "partner_track": { "type": "string", "enum": ["SCI_MATH", "SCI_BIO"] }
+      },
+      "required": ["id", "name", "track"]
+    },
+    "WeeklyData": {
+      "title": "WeeklyData",
+      "description": "Weekly goals, completions, scores, and schedule data",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "week_data": { "type": "object" },
+        "updated_at": { "type": "string" }
+      },
+      "required": ["id"]
+    },
+    "PastWeekRecords": {
+      "title": "PastWeekRecords",
+      "description": "Global historical records of completed study competition weeks",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "records": { "type": "array" },
+        "updated_at": { "type": "string" }
+      },
+      "required": ["id"]
+    },
+    "BacklogData": {
+      "title": "BacklogData",
+      "description": "Accumulated sessions backlog items per subject",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "backlog_data": { "type": "object" },
+        "updated_at": { "type": "string" }
+      },
+      "required": ["id"]
+    },
+    "UrtTrackerData": {
+      "title": "UrtTrackerData",
+      "description": "Cumulative URT tracker tables for 4 subjects (Physics, Chemistry, Math/Bio, Mechanics/Geology)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "urt_data": { "type": "object" },
+        "updated_at": { "type": "string" }
+      },
+      "required": ["id"]
+    }
+  },
+  "firestore": {
+    "/duotracker_profiles/{profileId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User login profiles, credentials and academic branch assignments"
+    },
+    "/duotracker_weeks/{weekKey}": {
+      "schema": { "$ref": "#/entities/WeeklyData" },
+      "description": "Active weekly session goals and schedule configuration"
+    },
+    "/duotracker_history/{historyId}": {
+      "schema": { "$ref": "#/entities/PastWeekRecords" },
+      "description": "Archived weekly head-to-head competition history and hall of fame"
+    },
+    "/duotracker_backlog/{backlogKey}": {
+      "schema": { "$ref": "#/entities/BacklogData" },
+      "description": "Backlog sessions per subject for each student"
+    },
+    "/duotracker_urt/{urtKey}": {
+      "schema": { "$ref": "#/entities/UrtTrackerData" },
+      "description": "Cumulative 4-table URT test results tracking"
+    }
+  }
+}

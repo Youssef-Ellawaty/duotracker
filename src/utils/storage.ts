@@ -1,4 +1,4 @@
-import { PastWeekRecord, UserBacklogData, UserProfile, WeeklyData } from '../types';
+import { PastWeekRecord, TrackType, UserBacklogData, UserProfile, UserUrtTrackerData, UrtRow, WeeklyData } from '../types';
 import { getSubjectsForTrack } from '../data/tracks';
 import { calculateWeeklyScore } from './scoreCalculator';
 import {
@@ -6,10 +6,12 @@ import {
   syncProfileToFirebase,
   syncWeekToFirebase,
   syncBacklogToFirebase,
+  syncUrtToFirebase,
   fetchPastWeeksFromFirebase,
   fetchWeekFromFirebase,
   fetchProfileFromFirebase,
   fetchBacklogFromFirebase,
+  fetchUrtFromFirebase,
 } from './firebaseClient';
 
 // حسابان فقط مسموح بهما في التطبيق بالكامل
@@ -54,6 +56,152 @@ export function weekKeyFor(name: string): string {
 
 export function backlogKeyFor(name: string): string {
   return `backlog_${name.replace(/\s+/g, '_')}`;
+}
+
+export function urtKeyFor(name: string): string {
+  return `urt_${name.replace(/\s+/g, '_')}`;
+}
+
+export interface UrtTableConfig {
+  key: string;
+  nameAr: string;
+  nameEn: string;
+  shortName: string;
+  iconName: string;
+  color: string;
+  accentBg: string;
+  borderColor: string;
+}
+
+export function getUrtTablesForTrack(track: TrackType): UrtTableConfig[] {
+  if (track === 'SCI_MATH') {
+    return [
+      {
+        key: 'physics',
+        nameAr: 'فيزياء',
+        nameEn: 'Physics',
+        shortName: 'Physics',
+        iconName: 'Zap',
+        color: 'from-amber-500 to-yellow-600',
+        accentBg: 'bg-amber-500/10 text-amber-300',
+        borderColor: 'border-amber-500/30',
+      },
+      {
+        key: 'chemistry',
+        nameAr: 'كيمياء',
+        nameEn: 'Chemistry',
+        shortName: 'Chemistry',
+        iconName: 'FlaskConical',
+        color: 'from-emerald-500 to-teal-600',
+        accentBg: 'bg-emerald-500/10 text-emerald-300',
+        borderColor: 'border-emerald-500/30',
+      },
+      {
+        key: 'math',
+        nameAr: 'ماث (رياضيات بحتة)',
+        nameEn: 'Pure Math',
+        shortName: 'Math',
+        iconName: 'Calculator',
+        color: 'from-cyan-500 to-blue-600',
+        accentBg: 'bg-cyan-500/10 text-cyan-300',
+        borderColor: 'border-cyan-500/30',
+      },
+      {
+        key: 'mechanics',
+        nameAr: 'ميكا (ميكانيكا تطبيقية)',
+        nameEn: 'Mechanics',
+        shortName: 'Meca',
+        iconName: 'Cog',
+        color: 'from-indigo-500 to-purple-600',
+        accentBg: 'bg-indigo-500/10 text-indigo-300',
+        borderColor: 'border-indigo-500/30',
+      },
+    ];
+  } else {
+    return [
+      {
+        key: 'physics',
+        nameAr: 'فيزياء',
+        nameEn: 'Physics',
+        shortName: 'Physics',
+        iconName: 'Zap',
+        color: 'from-amber-500 to-yellow-600',
+        accentBg: 'bg-amber-500/10 text-amber-300',
+        borderColor: 'border-amber-500/30',
+      },
+      {
+        key: 'chemistry',
+        nameAr: 'كيمياء',
+        nameEn: 'Chemistry',
+        shortName: 'Chemistry',
+        iconName: 'FlaskConical',
+        color: 'from-emerald-500 to-teal-600',
+        accentBg: 'bg-emerald-500/10 text-emerald-300',
+        borderColor: 'border-emerald-500/30',
+      },
+      {
+        key: 'biology',
+        nameAr: 'بايو (أحياء)',
+        nameEn: 'Biology',
+        shortName: 'Bio',
+        iconName: 'Dna',
+        color: 'from-green-500 to-emerald-700',
+        accentBg: 'bg-green-500/10 text-green-300',
+        borderColor: 'border-green-500/30',
+      },
+      {
+        key: 'geology',
+        nameAr: 'جيو (جيولوجيا)',
+        nameEn: 'Geology',
+        shortName: 'Geo',
+        iconName: 'Mountain',
+        color: 'from-stone-500 to-amber-700',
+        accentBg: 'bg-stone-500/10 text-amber-300',
+        borderColor: 'border-amber-600/30',
+      },
+    ];
+  }
+}
+
+export function createInitialUrtData(
+  userName: string,
+  track: TrackType
+): UserUrtTrackerData {
+  const configs = getUrtTablesForTrack(track);
+  const tables: Record<string, UrtRow[]> = {};
+  configs.forEach((c) => {
+    tables[c.key] = [];
+  });
+
+  return {
+    userId: userName.toLowerCase().includes('emy') ? 'user_emy' : 'user_youssef',
+    userName,
+    track,
+    lastUpdated: new Date().toISOString(),
+    tables,
+  };
+}
+
+export function syncUrtWithTrack(
+  urtData: UserUrtTrackerData,
+  track: TrackType
+): UserUrtTrackerData {
+  const currentTables = urtData?.tables || {};
+  const configs = getUrtTablesForTrack(track);
+  const newTables: Record<string, UrtRow[]> = { ...currentTables };
+
+  configs.forEach((c) => {
+    if (!Array.isArray(newTables[c.key])) {
+      newTables[c.key] = [];
+    }
+  });
+
+  return {
+    ...urtData,
+    track,
+    lastUpdated: new Date().toISOString(),
+    tables: newTables,
+  };
 }
 
 export function createInitialBacklogData(
@@ -252,6 +400,21 @@ export async function persistBacklog(name: string, data: UserBacklogData): Promi
     lastUpdated: new Date().toISOString(),
   };
   await syncBacklogToFirebase(key, updated);
+  return updated;
+}
+
+export async function fetchRemoteUrt(name: string): Promise<UserUrtTrackerData | null> {
+  const key = urtKeyFor(name);
+  return fetchUrtFromFirebase(key);
+}
+
+export async function persistUrt(name: string, data: UserUrtTrackerData): Promise<UserUrtTrackerData> {
+  const key = urtKeyFor(name);
+  const updated: UserUrtTrackerData = {
+    ...data,
+    lastUpdated: new Date().toISOString(),
+  };
+  await syncUrtToFirebase(key, updated);
   return updated;
 }
 

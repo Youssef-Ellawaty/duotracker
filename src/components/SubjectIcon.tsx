@@ -11,6 +11,7 @@ import {
   Globe,
   Award,
   Sparkles,
+  Target,
   HelpCircle,
   LucideProps,
 } from 'lucide-react';
@@ -43,6 +44,8 @@ export const SubjectIcon: React.FC<SubjectIconProps> = ({ name, ...props }) => {
       return <Award {...props} />;
     case 'Sparkles':
       return <Sparkles {...props} />;
+    case 'Target':
+      return <Target {...props} />;
     default:
       return <HelpCircle {...props} />;
   }

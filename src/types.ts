@@ -70,7 +70,7 @@ export interface PastWeekRecord {
   completedAt: string;
 }
 
-export type TabView = 'MY_WEEK' | 'PARTNER_WEEK' | 'HISTORY' | 'HALL_OF_FAME' | 'BACKLOG';
+export type TabView = 'MY_WEEK' | 'PARTNER_WEEK' | 'HISTORY' | 'HALL_OF_FAME' | 'BACKLOG' | 'URT_TRACKER';
 
 export interface SubjectBacklogItem {
   subjectId: string;
@@ -89,6 +89,25 @@ export interface UserBacklogData {
   track: TrackType;
   lastUpdated: string;
   items: SubjectBacklogItem[];
+}
+
+export interface UrtRow {
+  id: string;
+  title: string;          // عنوان (e.g. Test / Exam title)
+  questionsCount: string; // عدد الأسئلة (e.g. 50)
+  score: string;          // الدرجة (e.g. 48/50 or 96%)
+  duration: string;       // الوقت (e.g. 45 min)
+  notes?: string;         // ملاحظات اختيارية
+  createdAt?: string;
+}
+
+export interface UserUrtTrackerData {
+  userId: string;
+  userName: string;
+  track: TrackType;
+  lastUpdated: string;
+  // Map of subject key ('physics', 'chemistry', 'math' | 'biology', 'mechanics' | 'geology') to array of rows
+  tables: Record<string, UrtRow[]>;
 }
 
 export interface SubjectDef {

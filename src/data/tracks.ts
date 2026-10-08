@@ -73,6 +73,14 @@ export const ALL_SUBJECTS: SubjectDef[] = [
     iconName: 'Globe',
     color: 'from-violet-500 to-purple-600',
   },
+  {
+    id: 'urt',
+    nameAr: 'URT',
+    nameEn: 'URT',
+    tracks: ['SCI_MATH', 'SCI_BIO'],
+    iconName: 'Target',
+    color: 'from-fuchsia-500 to-pink-600',
+  },
 ];
 
 export function getSubjectsForTrack(track: TrackType): SubjectDef[] {

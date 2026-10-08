@@ -11,6 +11,7 @@ import {
   Zap,
   LogOut,
   Flame,
+  Target,
 } from 'lucide-react';
 import { TabView, UserProfile } from '../types';
 
@@ -73,6 +74,13 @@ export const Navbar: React.FC<NavbarProps> = ({
       icon: Layers,
       badgeColor: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
       count: backlogCount,
+    },
+    {
+      id: 'URT_TRACKER' as TabView,
+      labelAr: 'URT Tracker',
+      labelEn: 'URT Tracker',
+      icon: Target,
+      badgeColor: 'bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/30',
     },
   ];
 
@@ -189,8 +197,8 @@ export const Navbar: React.FC<NavbarProps> = ({
       </header>
 
       {/* Mobile Bottom Navigation Bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 glass-panel border-t border-slate-800/90 px-1.5 py-1.5">
-        <div className="grid grid-cols-5 gap-1 max-w-md mx-auto">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 glass-panel border-t border-slate-800/90 px-1 py-1.5">
+        <div className="grid grid-cols-6 gap-0.5 sm:gap-1 max-w-xl mx-auto">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
